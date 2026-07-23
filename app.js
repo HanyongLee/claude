@@ -9,9 +9,11 @@
   const HUE_COUNT = 6;
 
   const els = {
-    prevMonth: document.getElementById("prevMonth"),
-    nextMonth: document.getElementById("nextMonth"),
-    monthLabel: document.getElementById("monthLabel"),
+    prevPeriod: document.getElementById("prevPeriod"),
+    nextPeriod: document.getElementById("nextPeriod"),
+    periodLabel: document.getElementById("periodLabel"),
+    viewMonthBtn: document.getElementById("viewMonthBtn"),
+    viewYearBtn: document.getElementById("viewYearBtn"),
     addForm: document.getElementById("addHabitForm"),
     habitInput: document.getElementById("habitInput"),
     headerRow: document.getElementById("headerRow"),
@@ -51,7 +53,7 @@
   applyTheme(effectiveTheme());
 
   const today = new Date();
-  const view = { year: today.getFullYear(), month: today.getMonth() };
+  const view = { mode: "month", year: today.getFullYear(), month: today.getMonth() };
 
   function loadState() {
     try {
@@ -132,7 +134,12 @@
     render();
   }
 
-  function changeMonth(delta) {
+  function changePeriod(delta) {
+    if (view.mode === "year") {
+      view.year += delta;
+      render();
+      return;
+    }
     let m = view.month + delta;
     let y = view.year;
     if (m < 0) {
@@ -147,6 +154,17 @@
     render();
   }
 
+  function setViewMode(mode) {
+    view.mode = mode;
+    els.viewMonthBtn.setAttribute("aria-selected", String(mode === "month"));
+    els.viewYearBtn.setAttribute("aria-selected", String(mode === "year"));
+    render();
+  }
+
+  function isMonthFuture(y, m) {
+    return y > today.getFullYear() || (y === today.getFullYear() && m > today.getMonth());
+  }
+
   function monthProgress(habitId, y, m, numDays) {
     const rec = state.records[habitId] || {};
     let done = 0;
@@ -159,10 +177,41 @@
     return { done, elapsed };
   }
 
-  function render() {
-    els.monthLabel.textContent = `${view.year}년 ${MONTH_NAMES[view.month]}`;
-    els.emptyState.hidden = state.habits.length > 0;
+  function habitColorVar(habit) {
+    return `var(--hue-${habit.hueIndex ?? 0})`;
+  }
 
+  function renderHabitNameCell(habit, done, elapsed) {
+    const pct = elapsed > 0 ? Math.round((done / elapsed) * 100) : 0;
+    const nameTd = document.createElement("td");
+    nameTd.className = "habit-name-cell";
+    nameTd.innerHTML = `
+      <div class="habit-name-row">
+        <div style="width:100%">
+          <div class="habit-name-text" title="${escapeHtml(habit.name)}">${escapeHtml(habit.name)}</div>
+          <div class="habit-meta">
+            <div class="habit-bar"><div class="habit-bar-fill" style="width:${pct}%; --habit-color:${habitColorVar(habit)}"></div></div>
+            <div class="habit-progress">${done}/${elapsed}</div>
+          </div>
+        </div>
+        <button class="delete-habit-btn" aria-label="${escapeHtml(habit.name)} 삭제" title="삭제">✕</button>
+      </div>
+    `;
+    nameTd.querySelector(".delete-habit-btn").addEventListener("click", () => deleteHabit(habit.id));
+    return nameTd;
+  }
+
+  function render() {
+    els.emptyState.hidden = state.habits.length > 0;
+    if (view.mode === "year") {
+      renderYearView();
+    } else {
+      renderMonthView();
+    }
+  }
+
+  function renderMonthView() {
+    els.periodLabel.textContent = `${view.year}년 ${MONTH_NAMES[view.month]}`;
     const numDays = daysInMonth(view.year, view.month);
 
     els.headerRow.innerHTML = "";
@@ -187,41 +236,24 @@
     els.habitBody.innerHTML = "";
     for (const habit of state.habits) {
       const tr = document.createElement("tr");
-
-      const nameTd = document.createElement("td");
-      nameTd.className = "habit-name-cell";
       const { done, elapsed } = monthProgress(habit.id, view.year, view.month, numDays);
-      const pct = elapsed > 0 ? Math.round((done / elapsed) * 100) : 0;
-      const habitColor = `var(--hue-${habit.hueIndex ?? 0})`;
-      nameTd.innerHTML = `
-        <div class="habit-name-row">
-          <div style="width:100%">
-            <div class="habit-name-text" title="${escapeHtml(habit.name)}">${escapeHtml(habit.name)}</div>
-            <div class="habit-meta">
-              <div class="habit-bar"><div class="habit-bar-fill" style="width:${pct}%; --habit-color:${habitColor}"></div></div>
-              <div class="habit-progress">${done}/${elapsed}</div>
-            </div>
-          </div>
-          <button class="delete-habit-btn" aria-label="${escapeHtml(habit.name)} 삭제" title="삭제">✕</button>
-        </div>
-      `;
-      nameTd.querySelector(".delete-habit-btn").addEventListener("click", () => deleteHabit(habit.id));
-      tr.appendChild(nameTd);
+      tr.appendChild(renderHabitNameCell(habit, done, elapsed));
 
+      const habitColor = habitColorVar(habit);
       for (let d = 1; d <= numDays; d++) {
         const td = document.createElement("td");
         td.className = "day-col";
         const key = dateKey(view.year, view.month, d);
-        const done = !!(state.records[habit.id] && state.records[habit.id][key]);
+        const isDone = !!(state.records[habit.id] && state.records[habit.id][key]);
         const future = isFuture(view.year, view.month, d);
 
         const btn = document.createElement("button");
-        btn.className = "square-btn" + (done ? " done" : "") + (future ? " future" : "");
+        btn.className = "square-btn" + (isDone ? " done" : "") + (future ? " future" : "");
         btn.style.setProperty("--habit-color", habitColor);
-        btn.setAttribute("aria-pressed", String(done));
+        btn.setAttribute("aria-pressed", String(isDone));
         btn.setAttribute(
           "aria-label",
-          `${habit.name} ${view.month + 1}월 ${d}일 ${done ? "완료됨" : "미완료"}`
+          `${habit.name} ${view.month + 1}월 ${d}일 ${isDone ? "완료됨" : "미완료"}`
         );
         if (!future) {
           btn.addEventListener("click", () => toggleDay(habit.id, key));
@@ -236,14 +268,79 @@
     }
   }
 
+  function renderYearView() {
+    els.periodLabel.textContent = `${view.year}년`;
+
+    els.headerRow.innerHTML = "";
+    const nameTh = document.createElement("th");
+    nameTh.className = "habit-name-cell";
+    nameTh.textContent = "습관";
+    els.headerRow.appendChild(nameTh);
+
+    for (let m = 0; m < 12; m++) {
+      const th = document.createElement("th");
+      th.className = "year-col";
+      if (view.year === today.getFullYear() && m === today.getMonth()) {
+        th.classList.add("current-period");
+      }
+      th.textContent = MONTH_NAMES[m];
+      els.headerRow.appendChild(th);
+    }
+
+    els.habitBody.innerHTML = "";
+    for (const habit of state.habits) {
+      const tr = document.createElement("tr");
+      const habitColor = habitColorVar(habit);
+
+      let yearDone = 0;
+      let yearElapsed = 0;
+      const monthStats = [];
+      for (let m = 0; m < 12; m++) {
+        const stats = monthProgress(habit.id, view.year, m, daysInMonth(view.year, m));
+        monthStats.push(stats);
+        yearDone += stats.done;
+        yearElapsed += stats.elapsed;
+      }
+      tr.appendChild(renderHabitNameCell(habit, yearDone, yearElapsed));
+
+      for (let m = 0; m < 12; m++) {
+        const td = document.createElement("td");
+        td.className = "year-col";
+        const { done, elapsed } = monthStats[m];
+        const pct = elapsed > 0 ? Math.round((done / elapsed) * 100) : 0;
+        const future = isMonthFuture(view.year, m);
+
+        const btn = document.createElement("button");
+        btn.className = "month-cell" + (future ? " future" : "");
+        btn.style.setProperty("--habit-color", habitColor);
+        btn.style.setProperty("--pct", `${pct}%`);
+        btn.setAttribute(
+          "aria-label",
+          `${habit.name} ${view.year}년 ${MONTH_NAMES[m]} ${done}/${elapsed}일 달성, 자세히 보려면 클릭`
+        );
+        btn.innerHTML = `<span class="month-cell-value">${done}/${elapsed}</span>`;
+        btn.addEventListener("click", () => {
+          view.month = m;
+          setViewMode("month");
+        });
+        td.appendChild(btn);
+        tr.appendChild(td);
+      }
+
+      els.habitBody.appendChild(tr);
+    }
+  }
+
   function escapeHtml(str) {
     const div = document.createElement("div");
     div.textContent = str;
     return div.innerHTML;
   }
 
-  els.prevMonth.addEventListener("click", () => changeMonth(-1));
-  els.nextMonth.addEventListener("click", () => changeMonth(1));
+  els.prevPeriod.addEventListener("click", () => changePeriod(-1));
+  els.nextPeriod.addEventListener("click", () => changePeriod(1));
+  els.viewMonthBtn.addEventListener("click", () => setViewMode("month"));
+  els.viewYearBtn.addEventListener("click", () => setViewMode("year"));
 
   els.addForm.addEventListener("submit", (e) => {
     e.preventDefault();

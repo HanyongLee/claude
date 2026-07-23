@@ -15,10 +15,16 @@
         <h1 class="app-title">습관 트래커</h1>
         <p class="app-tagline">매일의 작은 약속을, 칸을 채우며 기록하세요</p>
       </div>
-      <div class="month-nav">
-        <button id="prevMonth" aria-label="이전 달" class="icon-btn">‹</button>
-        <span id="monthLabel" class="month-label"></span>
-        <button id="nextMonth" aria-label="다음 달" class="icon-btn">›</button>
+      <div class="view-controls">
+        <div class="view-switch" role="tablist">
+          <button id="viewMonthBtn" class="view-switch-btn" role="tab" aria-selected="true">월간</button>
+          <button id="viewYearBtn" class="view-switch-btn" role="tab" aria-selected="false">연간</button>
+        </div>
+        <div class="month-nav">
+          <button id="prevPeriod" aria-label="이전" class="icon-btn">‹</button>
+          <span id="periodLabel" class="month-label"></span>
+          <button id="nextPeriod" aria-label="다음" class="icon-btn">›</button>
+        </div>
       </div>
     </header>
 
