@@ -1,5 +1,6 @@
 (() => {
   const STORAGE_KEY = "habit-tracker-state-v1";
+  const THEME_KEY = "habit-tracker-theme";
   const WEEKDAY_NAMES = ["일", "월", "화", "수", "목", "금", "토"];
   const MONTH_NAMES = [
     "1월", "2월", "3월", "4월", "5월", "6월",
@@ -16,7 +17,38 @@
     headerRow: document.getElementById("headerRow"),
     habitBody: document.getElementById("habitBody"),
     emptyState: document.getElementById("emptyState"),
+    themeToggle: document.getElementById("themeToggle"),
   };
+
+  function systemPrefersDark() {
+    return window.matchMedia("(prefers-color-scheme: dark)").matches;
+  }
+
+  function effectiveTheme() {
+    return localStorage.getItem(THEME_KEY) || (systemPrefersDark() ? "dark" : "light");
+  }
+
+  function renderThemeToggle(theme) {
+    const isDark = theme === "dark";
+    els.themeToggle.textContent = isDark ? "☀" : "☾";
+    els.themeToggle.setAttribute(
+      "aria-label",
+      isDark ? "라이트 모드로 전환" : "다크 모드로 전환"
+    );
+  }
+
+  function applyTheme(theme) {
+    document.documentElement.setAttribute("data-theme", theme);
+    renderThemeToggle(theme);
+  }
+
+  els.themeToggle.addEventListener("click", () => {
+    const next = effectiveTheme() === "dark" ? "light" : "dark";
+    localStorage.setItem(THEME_KEY, next);
+    applyTheme(next);
+  });
+
+  applyTheme(effectiveTheme());
 
   const today = new Date();
   const view = { year: today.getFullYear(), month: today.getMonth() };
