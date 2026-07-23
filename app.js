@@ -5,10 +5,7 @@
     "1월", "2월", "3월", "4월", "5월", "6월",
     "7월", "8월", "9월", "10월", "11월", "12월",
   ];
-  const COLOR_PALETTE = [
-    "#4f7cff", "#33b679", "#ff8a3d", "#e5484d",
-    "#a855f7", "#0ea5b0", "#e0a800", "#ec4899",
-  ];
+  const HUE_COUNT = 6;
 
   const els = {
     prevMonth: document.getElementById("prevMonth"),
@@ -68,17 +65,13 @@
     return cellDate > todayStart;
   }
 
-  function nextColor() {
-    return COLOR_PALETTE[state.habits.length % COLOR_PALETTE.length];
-  }
-
   function addHabit(name) {
     const trimmed = name.trim();
     if (!trimmed) return;
     const habit = {
       id: `h_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       name: trimmed,
-      color: nextColor(),
+      hueIndex: state.habits.length % HUE_COUNT,
     };
     state.habits.push(habit);
     state.records[habit.id] = {};
@@ -166,11 +159,16 @@
       const nameTd = document.createElement("td");
       nameTd.className = "habit-name-cell";
       const { done, elapsed } = monthProgress(habit.id, view.year, view.month, numDays);
+      const pct = elapsed > 0 ? Math.round((done / elapsed) * 100) : 0;
+      const habitColor = `var(--hue-${habit.hueIndex ?? 0})`;
       nameTd.innerHTML = `
         <div class="habit-name-row">
-          <div>
+          <div style="width:100%">
             <div class="habit-name-text" title="${escapeHtml(habit.name)}">${escapeHtml(habit.name)}</div>
-            <div class="habit-progress">${done}/${elapsed}일</div>
+            <div class="habit-meta">
+              <div class="habit-bar"><div class="habit-bar-fill" style="width:${pct}%; --habit-color:${habitColor}"></div></div>
+              <div class="habit-progress">${done}/${elapsed}</div>
+            </div>
           </div>
           <button class="delete-habit-btn" aria-label="${escapeHtml(habit.name)} 삭제" title="삭제">✕</button>
         </div>
@@ -187,7 +185,7 @@
 
         const btn = document.createElement("button");
         btn.className = "square-btn" + (done ? " done" : "") + (future ? " future" : "");
-        btn.style.setProperty("--habit-color", habit.color);
+        btn.style.setProperty("--habit-color", habitColor);
         btn.setAttribute("aria-pressed", String(done));
         btn.setAttribute(
           "aria-label",
