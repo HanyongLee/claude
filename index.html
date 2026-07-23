@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>습관 트래커</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="app-header">
+      <h1>습관 트래커</h1>
+      <div class="month-nav">
+        <button id="prevMonth" aria-label="이전 달" class="icon-btn">‹</button>
+        <span id="monthLabel" class="month-label"></span>
+        <button id="nextMonth" aria-label="다음 달" class="icon-btn">›</button>
+      </div>
+    </header>
+
+    <form id="addHabitForm" class="add-habit-form">
+      <input
+        id="habitInput"
+        type="text"
+        placeholder="새로운 습관을 입력하세요 (예: 물 2L 마시기)"
+        maxlength="40"
+        autocomplete="off"
+      />
+      <button type="submit">추가</button>
+    </form>
+
+    <div id="emptyState" class="empty-state" hidden>
+      아직 등록된 습관이 없어요. 위에서 습관을 추가해보세요!
+    </div>
+
+    <div class="table-wrapper">
+      <table id="habitTable">
+        <thead>
+          <tr id="headerRow"></tr>
+        </thead>
+        <tbody id="habitBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
