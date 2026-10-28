@@ -1,0 +1,544 @@
+<script>
+/* Client.html — 화면 로직. 권한 판단은 서버가 한다(여기서 메뉴를 숨기는 것은 편의 기능). */
+'use strict';
+var S = { boot: null, cat: '전체' };
+
+/* ───── 공통 ───── */
+function call(fn) {
+  var args = Array.prototype.slice.call(arguments, 1);
+  return new Promise(function (resolve, reject) {
+    var r = google.script.run
+      .withSuccessHandler(function (res) { res && res.ok ? resolve(res.data) : reject(new Error(res ? res.error : '응답 없음')); })
+      .withFailureHandler(function (e) { reject(e); });
+    r[fn].apply(r, args);
+  });
+}
+function h(v) {
+  return v === null || v === undefined ? '' : String(v).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+function won(n) { return n === null || n === undefined || n === '' ? '—' : Number(n).toLocaleString('ko-KR') + '원'; }
+function num(n) { return n === null || n === undefined || n === '' ? '—' : Number(n).toLocaleString('ko-KR'); }
+function pct(g) {
+  if (!g) return '—';
+  if (g.status !== '정상') return '<span class="muted" title="' + h(g.reason) + '">비교불가</span>';
+  var v = (g.value * 100).toFixed(1);
+  return (g.value > 0 ? '+' : '') + v + '%';
+}
+function can(a) { return S.boot && S.boot.perms.indexOf(a) >= 0; }
+function badge(text) {
+  var cls = { '정상': 'b-ok', '완료': 'b-ok', '일치': 'b-ok', '승인': 'b-ok',
+    '판정보류': 'b-bad', '불일치': 'b-bad', '누락': 'b-bad', '실패': 'b-bad', '형식오류': 'b-bad', '오류': 'b-bad', '반려': 'b-bad',
+    '지연': 'b-warn', '부분적재': 'b-warn', '경고': 'b-warn', '승인대기': 'b-warn', '휴업': 'b-warn', '폐업': 'b-bad',
+    '중복파일': 'b-info' }[text] || 'b-info';
+  return '<span class="badge ' + cls + '">' + h(text) + '</span>';
+}
+function toast(msg, err) {
+  var t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'toast show' + (err ? ' err' : '');
+  clearTimeout(t._h); t._h = setTimeout(function () { t.className = 'toast'; }, err ? 6000 : 3000);
+}
+function view(html) { document.getElementById('view').innerHTML = html; }
+function loading() { view('<p class="muted">불러오는 중…</p>'); }
+function fail(e) { view('<div class="note bad">' + h(e.message || e) + '</div>'); }
+function formData(form) {
+  var o = {};
+  Array.prototype.forEach.call(form.elements, function (el) { if (el.name) o[el.name] = el.value; });
+  return o;
+}
+function table(cols, rows, opt) {
+  opt = opt || {};
+  if (!rows.length) return '<p class="muted">' + h(opt.empty || '자료 없음') + '</p>';
+  var head = cols.map(function (c) { return '<th class="' + (c.num ? 'num' : '') + '">' + h(c.t) + '</th>'; }).join('');
+  var body = rows.map(function (r, i) {
+    var tds = cols.map(function (c) {
+      var v = c.f ? c.f(r) : h(r[c.k]);
+      return '<td class="' + (c.num ? 'num' : '') + (c.wrap ? ' wrap' : '') + '">' + v + '</td>';
+    }).join('');
+    return '<tr' + (opt.onRow ? ' class="click" data-i="' + i + '"' : '') + '>' + tds + '</tr>';
+  }).join('');
+  return '<div class="scroll"><table' + (opt.id ? ' id="' + opt.id + '"' : '') + '><thead><tr>' + head + '</tr></thead><tbody>' + body + '</tbody></table></div>';
+}
+function bindRows(id, rows, fn) {
+  var t = document.getElementById(id);
+  if (!t) return;
+  t.addEventListener('click', function (e) {
+    var tr = e.target.closest('tr[data-i]');
+    if (tr) fn(rows[+tr.getAttribute('data-i')]);
+  });
+}
+
+/* ───── 상단 ───── */
+function renderNav() {
+  var items = [['home', '통합 홈', 'home.view'], ['ws', '중도매인 조회', 'ws.view'], ['master', '기초자료', 'master.edit'],
+    ['approvals', '승인 대기', 'master.edit'], ['import', '가져오기·오류 점검', 'import.view'],
+    ['users', '사용자·권한', 'user.manage'], ['audit', '변경·처리 이력', 'audit.view']];
+  var cur = (location.hash.replace('#/', '').split('/')[0]) || 'home';
+  document.getElementById('nav').innerHTML = items.filter(function (i) { return can(i[2]); }).map(function (i) {
+    return '<a href="#/' + i[0] + '" class="' + (cur === i[0] ? 'on' : '') + '">' + i[1] + '</a>';
+  }).join('') + '<span class="muted" style="align-self:center;font-size:12px">채권·동향·실적 대시보드: 2~3단계</span>';
+}
+function renderStatus(st, meta) {
+  st = st || {};
+  var ds = meta ? meta.dataState : st.data_status || '자료없음';
+  var parts = [
+    '기준일 <b>' + h(meta ? meta.baseDate : st.latest_base_date || '—') + '</b>',
+    meta && meta.period ? '집계기간 <b>' + h(meta.period) + '</b>' : '',
+    '최종 갱신 <b>' + h(st.last_updated_at || (meta && meta.lastUpdated) || '—') + '</b>',
+    '데이터 상태 ' + badge(ds) + (st.status_reasons && !meta ? ' <span>' + h(st.status_reasons) + '</span>' : '')
+  ];
+  document.getElementById('statusbar').innerHTML = parts.filter(Boolean).map(function (p) { return '<span>' + p + '</span>'; }).join('');
+}
+
+/* ───── 라우팅 ───── */
+function route() {
+  if (!S.boot) return;
+  document.getElementById('view').onclick = null;   // 이전 화면의 클릭 처리 제거
+  renderNav();
+  var p = location.hash.replace('#/', '').split('/');
+  var page = p[0] || 'home';
+  var fn = { home: pageHome, ws: p[1] ? function () { page360(decodeURIComponent(p[1]), p[2]); } : pageSearch,
+    master: p[1] ? function () { pageMasterDetail(decodeURIComponent(p[1])); } : pageMasterList,
+    approvals: pageApprovals, import: pageImport, users: pageUsers, audit: pageAudit }[page] || pageHome;
+  renderStatus(S.boot.status);
+  fn();
+}
+window.addEventListener('hashchange', route);
+
+/* ───── 통합 홈 ───── */
+function pageHome() {
+  loading();
+  call('api_home').then(function (d) {
+    S.boot.status = d.status; renderStatus(d.status);
+    var c = d.counts;
+    var html = '<h1>오늘 처리할 일</h1>';
+    if (d.status.data_status && d.status.data_status !== '정상') {
+      html += '<div class="note bad">데이터 상태가 <b>' + h(d.status.data_status) + '</b>입니다. 이 기간의 수치는 정상으로 판단하지 마세요. ' + h(d.status.status_reasons || '') + '</div>';
+    }
+    html += '<div class="tiles">' +
+      tile('담당 중도매인', c.myWholesalers, '명') + tile('담보·보증 기한 도래', c.expiring, '건', APP_WARN_DAYS + '일 이내') +
+      tile('데이터 이상 중도매인', c.dataIssues, '명', '최근 7일') +
+      (can('import.view') ? tile('가져오기 문제', c.batchProblems, '건') : '') +
+      (can('master.edit') ? tile('기초자료 승인 대기', c.pending, '건') : '') + '</div>';
+    html += '<div class="grid">';
+    html += '<div class="card span2"><h2>④ 담보·보증 기한 도래</h2>' + table([
+      { t: '중도매인', f: function (r) { return '<a href="#/ws/' + encodeURIComponent(r.wholesaler_id) + '">' + h(r.wholesaler_id + ' ' + r.name) + '</a>'; } },
+      { t: '구분', k: 'kind' }, { t: '내용', k: 'label' }, { t: '만기일', k: 'date' },
+      { t: 'D-day', num: true, f: function (r) { return 'D-' + r.dday; } }], d.expiring, { empty: '기한 도래 건 없음' }) + '</div>';
+    html += '<div class="card"><h2>⑥ 데이터 갱신 실패·누락</h2>' + table([
+      { t: '중도매인', f: function (r) { return '<a href="#/ws/' + encodeURIComponent(r.wholesaler_id) + '">' + h(r.wholesaler_id + ' ' + r.name) + '</a>'; } },
+      { t: '내용', wrap: true, f: function (r) { return r.items.slice(0, 3).map(function (i) { return h(i.date) + ' ' + badge(i.status) + ' ' + h(i.detail); }).join('<br>') + (r.items.length > 3 ? '<br><span class="muted">외 ' + (r.items.length - 3) + '건</span>' : ''); } }],
+      d.dataIssues, { empty: '최근 7일 데이터 이상 없음' }) +
+      (d.batchProblems.length ? '<h3>가져오기 문제</h3>' + table([{ t: '파일', k: 'file_name' }, { t: '상태', f: function (r) { return badge(r.status); } }, { t: '내용', k: 'message', wrap: true }], d.batchProblems) : '') + '</div>';
+    if (can('master.edit')) {
+      html += '<div class="card"><h2>기초자료 승인 대기</h2>' + table([
+        { t: '구분', k: 'tableLabel' }, { t: '중도매인', k: 'wholesaler_id' }, { t: 'ID·버전', f: function (r) { return h(r.id) + ' v' + h(r.version_no); } },
+        { t: '요청', f: function (r) { return h(r.requested_by) + '<br><span class="muted">' + h(r.requested_at) + '</span>'; } }, { t: '사유', k: 'change_reason', wrap: true }],
+        d.pending, { empty: '승인 대기 없음' }) + (d.pending.length && can('master.approve') ? '<div class="row"><a href="#/approvals">승인 처리 →</a></div>' : '') + '</div>';
+    }
+    if (d.myList.length) {
+      html += '<div class="card"><h2>내 담당 중도매인</h2>' + table([
+        { t: '코드', f: function (r) { return '<a href="#/ws/' + encodeURIComponent(r.wholesaler_id) + '">' + h(r.wholesaler_id) + '</a>'; } },
+        { t: '상호', k: 'name' }, { t: '영업 상태', f: function (r) { return badge(r.biz_status); } }], d.myList) + '</div>';
+    }
+    html += '<div class="card"><h2>2단계에서 추가</h2><p class="muted">' + d.phase2.map(h).join(' · ') + '</p></div>';
+    html += '</div>';
+    view(html);
+  }).catch(fail);
+}
+var APP_WARN_DAYS = 60;
+function tile(k, v, unit, sub) {
+  return '<div class="tile"><div class="k">' + h(k) + '</div><div class="v">' + num(v) + ' <small>' + h(unit) + '</small></div>' +
+    (sub ? '<div class="k">' + h(sub) + '</div>' : '') + '</div>';
+}
+
+/* ───── 중도매인 조회 ───── */
+function pageSearch() {
+  view('<h1>중도매인 조회</h1><div class="row"><input id="q" placeholder="코드 또는 상호" autofocus> <button class="primary" id="go">검색</button></div><div id="res"></div>');
+  var go = function () {
+    document.getElementById('res').innerHTML = '<p class="muted">검색 중…</p>';
+    call('api_searchWholesalers', document.getElementById('q').value).then(function (rows) {
+      document.getElementById('res').innerHTML = table([{ t: '코드', k: 'wholesaler_id' }, { t: '상호', k: 'name' },
+        { t: '영업 상태', f: function (r) { return badge(r.biz_status); } }, { t: '취급 부류', k: 'categories' }, { t: '담당 경매사', k: 'assignees' }],
+        rows, { id: 'wsTbl', onRow: true, empty: '조회 가능한 중도매인이 없습니다.' });
+      bindRows('wsTbl', rows, function (r) { location.hash = '#/ws/' + encodeURIComponent(r.wholesaler_id); });
+    }).catch(function (e) { document.getElementById('res').innerHTML = '<div class="note bad">' + h(e.message) + '</div>'; });
+  };
+  document.getElementById('go').onclick = go;
+  document.getElementById('q').onkeydown = function (e) { if (e.key === 'Enter') go(); };
+  go();
+}
+
+/* ───── 중도매인 통합 상세 ───── */
+function page360(wsId, asOf) {
+  loading();
+  call('api_get360', wsId, asOf || '').then(function (d) {
+    var m = d.meta, w = d.ws, c = d.credit;
+    renderStatus(S.boot.status, { baseDate: m.baseDate, period: m.period, lastUpdated: m.lastUpdated, dataState: d.dataState.state });
+    var html = '<div class="row" style="justify-content:space-between"><h1>' + h(w.wholesaler_id + ' ' + w.name) + ' ' + badge(w.biz_status_asof || w.biz_status_now) + '</h1>' +
+      '<div class="row"><label class="muted">기준일로 보기 <input type="date" id="asOf" value="' + h(m.asOf) + '"></label><button id="asOfGo">조회</button>' +
+      (m.isPast ? ' <a href="#/ws/' + encodeURIComponent(w.wholesaler_id) + '">오늘 기준</a>' : '') +
+      (can('master.edit') ? ' <a href="#/master/' + encodeURIComponent(w.wholesaler_id) + '"><button>기초자료 수정</button></a>' : '') + '</div></div>';
+    if (m.isPast) html += '<div class="note warn">과거 시점 조회: ' + h(m.asOf) + ' 당시 유효했던 담보·보증·한도·영업 상태를 표시합니다.</div>';
+    if (d.dataState.state !== '정상') html += '<div class="note bad"><b>판정 보류(자료 불완전)</b> — ' + d.dataState.reasons.map(h).join('<br>') + '</div>';
+
+    html += '<div class="tiles">' +
+      tile('미수 잔액', c.ar_balance === null ? '—' : Math.round(c.ar_balance / 10000), '만원', c.ar_date ? c.ar_date + ' 기준' : '자료 없음') +
+      tile('연체금액', c.overdue_amount === null ? '—' : Math.round(c.overdue_amount / 10000), '만원', '최장 ' + num(c.max_overdue_days) + '일') +
+      tile('적용 한도(유형별)', d.limits.length, '건', '합산하지 않음') +
+      tile('기한 도래', d.expiring.length, '건', APP_WARN_DAYS + '일 이내') + '</div>';
+
+    html += '<div class="grid">';
+    html += '<div class="card"><h2>개요</h2><dl class="kv">' +
+      '<dt>대표자</dt><dd>' + h(w.representative) + '</dd><dt>영업 상태</dt><dd>' + badge(w.biz_status_asof || '—') + (w.biz_status_asof !== w.biz_status_now ? ' <span class="muted">(현재 ' + h(w.biz_status_now) + ')</span>' : '') + '</dd>' +
+      '<dt>거래 시작일</dt><dd>' + h(w.trade_start_date) + '</dd><dt>취급 부류</dt><dd>' + h(w.categories) + '</dd>' +
+      '<dt>담당 경매사</dt><dd>' + (w.assignees.map(function (a) { return h(a.name); }).join(', ') || '<span class="muted">미지정</span>') + '</dd>' +
+      (d.contacts ? '<dt>업무 연락처</dt><dd>' + (d.contacts.map(function (x) { return h(x.contact_type + ' ' + x.value); }).join('<br>') || '—') + '</dd>' : '') +
+      '</dl>' + (d.pendingVersions ? '<div class="note warn">승인 대기 중인 기초자료 변경 ' + d.pendingVersions + '건(승인 전에는 반영되지 않음)</div>' : '') + '</div>';
+
+    html += '<div class="card"><h2>채권 현황</h2><dl class="kv"><dt>미수 잔액</dt><dd>' + won(c.ar_balance) + ' <span class="muted">' + h(c.ar_date) + '</span></dd>' +
+      '<dt>연체금액</dt><dd>' + won(c.overdue_amount) + '</dd><dt>최장 연체일수</dt><dd>' + num(c.max_overdue_days) + '일</dd></dl>' +
+      '<div class="note">' + h(c.overdue_note) + '</div>' +
+      '<h3>한도 (유형별, 합산 안 함)</h3>' + table([{ t: '유형', k: 'limit_type' }, { t: '금액', num: true, f: function (r) { return won(r.amount); } },
+        { t: '적용기간', f: function (r) { return h(r.valid_from) + ' ~ ' + h(r.valid_to === '9999-12-31' ? '' : r.valid_to); } },
+        { t: '버전', f: function (r) { return 'v' + h(r.version_no); } }, { t: '승인 근거', k: 'approval_basis', wrap: true }], d.limits, { empty: '유효한 한도 없음' }) +
+      '<div class="note">' + h(c.limit_note) + '</div>' +
+      '<h3>최근 입금</h3>' + table([{ t: '입금일', k: 'receipt_date' }, { t: '반영일', k: 'posted_date' }, { t: '금액', num: true, f: function (r) { return won(r.amount); } }, { t: '구분', k: 'receipt_type' }], c.recentReceipts) + '</div>';
+
+    html += '<div class="card span2"><h2>담보</h2>' + table([{ t: 'ID·버전', f: function (r) { return h(r.collateral_id) + ' v' + h(r.version_no); } }, { t: '종류', k: 'collateral_type' },
+      { t: '설정금액', num: true, f: function (r) { return won(r.set_amount); } }, { t: '평가금액', num: true, f: function (r) { return won(r.appraised_amount); } },
+      { t: '내부 인정금액', num: true, f: function (r) { return won(r.recognized_amount); } }, { t: '평가일', k: 'appraisal_date' }, { t: '만기', k: 'expiry_date' }, { t: '검토', k: 'review_status' }],
+      d.collaterals, { empty: '유효한 담보 없음' }) + '<div class="note">설정금액은 회수 가능액이 아닙니다. 회수 가능성은 내부 기준에 따라 별도 판단합니다.</div>' +
+      '<h2 style="margin-top:12px">연대보증</h2>' + table([{ t: 'ID·버전', f: function (r) { return h(r.guarantee_id) + ' v' + h(r.version_no); } }, { t: '여부', k: 'has_guarantee' },
+        { t: '범위', k: 'scope' }, { t: '보증한도', num: true, f: function (r) { return won(r.guarantee_limit); } },
+        { t: '기간', f: function (r) { return r.period_from ? h(r.period_from) + ' ~ ' + h(r.period_to) : '—'; } }, { t: '확인일', k: 'confirmed_date' }],
+        d.guarantees, { empty: '보증 정보 없음' }) +
+      (can('ws.viewGuarantorPII') ? '<div class="row"><button id="pii">보증인 상세 보기(조회 기록 남음)</button></div><div id="piiBox"></div>' : '') + '</div>';
+
+    html += '<div class="card wide"><h2>실적 요약 — 최근 12개월 구매금액</h2>' + trendBlock(d.trend) + '<div class="note">' + h(d.turnoverNote) + '</div></div>';
+
+    if (d.expiring.length) html += '<div class="card"><h2>기한 도래</h2>' + table([{ t: '구분', k: 'kind' }, { t: 'ID', k: 'id' }, { t: '내용', k: 'label' }, { t: '만기', k: 'date' }, { t: 'D-day', num: true, f: function (r) { return 'D-' + r.dday; } }], d.expiring) + '</div>';
+    html += '<div class="card"><h2>데이터 상태 (최근 30일)</h2>' + table([{ t: '일자', k: 'date' }, { t: '상태', f: function (r) { return badge(r.status); } }, { t: '내용', k: 'detail', wrap: true }], d.dataState.issues, { empty: '이상 없음' }) + '</div>';
+    if (d.evidence) html += '<div class="card"><h2>증빙</h2>' + table([{ t: '파일', k: 'file_name' }, { t: '유형', k: 'doc_type' }, { t: '대상', k: 'target_id' }, { t: '등록', k: 'created_at' }], d.evidence) + '</div>';
+    if (d.history) html += '<div class="card wide"><h2>변경 이력</h2>' + table([{ t: '일시', k: 'at' }, { t: '사용자', k: 'user_id' }, { t: '작업', k: 'action' }, { t: '대상', k: 'table_name' }, { t: '키', k: 'record_key' }, { t: '사유', k: 'reason', wrap: true }], d.history) + '</div>';
+    html += '</div>';
+    view(html);
+
+    document.getElementById('asOfGo').onclick = function () {
+      location.hash = '#/ws/' + encodeURIComponent(w.wholesaler_id) + '/' + document.getElementById('asOf').value;
+    };
+    var pb = document.getElementById('pii');
+    if (pb) pb.onclick = function () {
+      call('api_getGuarantors', w.wholesaler_id).then(function (rows) {
+        document.getElementById('piiBox').innerHTML = table([{ t: '참조', k: 'guarantor_ref' }, { t: '성명', k: 'name' }, { t: '관계', k: 'relation' }], rows, { empty: '보증인 없음' });
+      }).catch(function (e) { toast(e.message, true); });
+    };
+    bindTrend(d.trend);
+  }).catch(fail);
+}
+
+function trendBlock(trend) {
+  if (!trend.length) return '<p class="muted">집계 자료 없음</p>';
+  return '<div class="tabs" id="catTabs">' + ['전체', '과일', '채소'].map(function (c) {
+    return '<button data-c="' + c + '" class="' + (S.cat === c ? 'on' : '') + '">' + c + '</button>';
+  }).join('') + '</div><div id="trendChart"></div><div id="trendTable"></div>';
+}
+function bindTrend(trend) {
+  var tabs = document.getElementById('catTabs');
+  if (!tabs) return;
+  var draw = function () {
+    Array.prototype.forEach.call(tabs.children, function (b) { b.className = b.getAttribute('data-c') === S.cat ? 'on' : ''; });
+    document.getElementById('trendChart').innerHTML = trendSvg(trend, S.cat);
+    document.getElementById('trendTable').innerHTML = table([
+      { t: '월', f: function (r) { return h(r.ym) + (r.partial ? ' <span class="badge b-warn">진행 중</span>' : ''); } },
+      { t: '구매금액', num: true, f: function (r) { return won(r.byCategory[S.cat].amount); } },
+      { t: '구매일수', num: true, f: function (r) { return num(r.byCategory[S.cat].purchaseDays); } },
+      { t: '전년 동월', num: true, f: function (r) { return r.partial ? won(r.mtd.byCategory[S.cat].prevAmount) + '<br><span class="muted">' + h(r.mtd.basis) + ' ' + r.mtd.elapsedAuctionDays + '일</span>' : won(r.byCategory[S.cat].prevYearAmount); } },
+      { t: '전년 대비', num: true, f: function (r) { return r.partial ? pct(r.mtd.byCategory[S.cat].growth) : pct(r.byCategory[S.cat].yoy); } }
+    ], trend.slice().reverse());
+  };
+  tabs.onclick = function (e) { var c = e.target.getAttribute('data-c'); if (c) { S.cat = c; draw(); } };
+  draw();
+}
+/* 막대: 당해(series-1), 전년 대응 월(series-2). 진행 중인 월의 전년 막대는 동일 경과 경매일 기준 금액 */
+function trendSvg(trend, cat) {
+  var W = 760, H = 220, L = 56, B = 28, T = 10, R = 8;
+  var vals = trend.map(function (t) {
+    var b = t.byCategory[cat];
+    return { ym: t.ym, cur: b.amount || 0, prev: t.partial ? t.mtd.byCategory[cat].prevAmount : (b.prevYearAmount || 0), partial: t.partial };
+  });
+  var max = Math.max.apply(null, vals.map(function (v) { return Math.max(v.cur, v.prev); }).concat([1]));
+  var step = Math.pow(10, Math.floor(Math.log10(max))), nice = Math.ceil(max / step) * step;
+  var pw = (W - L - R) / vals.length, bw = Math.min(16, (pw - 8) / 2), y = function (v) { return T + (H - T - B) * (1 - v / nice); };
+  var g = '';
+  for (var i = 0; i <= 4; i++) {
+    var v = nice * i / 4, yy = y(v);
+    g += '<g class="grid"><line x1="' + L + '" x2="' + (W - R) + '" y1="' + yy + '" y2="' + yy + '"/></g>' +
+      '<text class="axis" x="' + (L - 6) + '" y="' + (yy + 4) + '" text-anchor="end">' + Math.round(v / 10000).toLocaleString('ko-KR') + '</text>';
+  }
+  vals.forEach(function (v, i) {
+    var cx = L + pw * i + pw / 2;
+    var bar = function (x, val, cls, label) {
+      var top = y(val), hgt = Math.max(0, H - B - top), r = Math.min(4, hgt);
+      return '<path class="bar ' + cls + '" d="M' + x + ',' + (H - B) + 'V' + (top + r) + 'Q' + x + ',' + top + ' ' + (x + r) + ',' + top +
+        'H' + (x + bw - r) + 'Q' + (x + bw) + ',' + top + ' ' + (x + bw) + ',' + (top + r) + 'V' + (H - B) + 'Z"><title>' + label + '</title></path>';
+    };
+    g += bar(cx - bw - 1, v.prev, 's2', h(v.ym) + ' 전년 대응' + (v.partial ? '(동일 경과일)' : '') + ': ' + won(v.prev));
+    g += bar(cx + 1, v.cur, 's1', h(v.ym) + (v.partial ? '(진행 중)' : '') + ': ' + won(v.cur));
+    g += '<text class="axis" x="' + cx + '" y="' + (H - 10) + '" text-anchor="middle">' + v.ym.substring(2).replace('-', '.') + (v.partial ? '*' : '') + '</text>';
+  });
+  return '<div class="legend"><span><i style="background:var(--series-1)"></i>당해</span><span><i style="background:var(--series-2)"></i>전년 대응 월</span><span>단위: 만원 · *진행 중인 월은 동일 경과 경매일 기준 비교</span></div>' +
+    '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="최근 12개월 ' + h(cat) + ' 구매금액">' + g + '</svg>';
+}
+
+/* ───── 기초자료 ───── */
+function pageMasterList() {
+  view('<h1>기초자료</h1><div class="row"><input id="q" placeholder="코드 또는 상호"><button id="go">검색</button></div><div id="res"></div>' +
+    '<div class="card"><h2>신규 중도매인 등록</h2><form class="f" id="newWs">' +
+    '<label>중도매인코드*<input name="wholesaler_id" required></label><label>상호*<input name="name" required></label>' +
+    '<label>대표자*<input name="representative" required></label><label>거래 시작일*<input type="date" name="trade_start_date" required></label>' +
+    '<label>취급 부류<select name="categories"><option>과일,채소</option><option>과일</option><option>채소</option></select></label>' +
+    '<label>결제 그룹<input name="settle_group"></label><label class="full">변경 사유*<input name="reason" required></label>' +
+    '<div class="full"><button class="primary">등록</button></div></form></div>');
+  var go = function () {
+    call('api_searchWholesalers', document.getElementById('q').value).then(function (rows) {
+      document.getElementById('res').innerHTML = table([{ t: '코드', k: 'wholesaler_id' }, { t: '상호', k: 'name' }, { t: '상태', f: function (r) { return badge(r.biz_status); } }, { t: '담당', k: 'assignees' }], rows, { id: 'mTbl', onRow: true });
+      bindRows('mTbl', rows, function (r) { location.hash = '#/master/' + encodeURIComponent(r.wholesaler_id); });
+    }).catch(fail);
+  };
+  document.getElementById('go').onclick = go;
+  document.getElementById('newWs').onsubmit = function (e) {
+    e.preventDefault();
+    var o = formData(e.target), reason = o.reason; delete o.reason;
+    call('api_createWholesaler', o, reason).then(function (r) { toast('등록했습니다: ' + r.wholesaler_id); location.hash = '#/master/' + encodeURIComponent(r.wholesaler_id); })
+      .catch(function (err) { toast(err.message, true); });
+  };
+  go();
+}
+
+var VFORMS = {
+  M_COLLATERAL: { label: '담보', id: 'collateral_id', fields: [['collateral_type', '종류*'], ['set_amount', '설정금액*', 'num'], ['appraised_amount', '평가금액', 'num'],
+    ['appraisal_date', '평가일', 'date'], ['recognized_amount', '내부 인정금액', 'num'], ['confirmed_date', '확인일', 'date'], ['review_status', '검토 상태'], ['expiry_date', '만기일', 'date']] },
+  M_GUARANTEE: { label: '연대보증', id: 'guarantee_id', fields: [['has_guarantee', '보증 여부*', 'sel:있음,없음'], ['guarantor_ref', '보증인 참조(GR-…)'], ['scope', '보증 범위'],
+    ['guarantee_limit', '보증 한도', 'num'], ['period_from', '보증 시작', 'date'], ['period_to', '보증 종료', 'date'], ['confirmed_date', '확인일', 'date']] },
+  M_LIMIT: { label: '한도', id: 'limit_id', fields: [['limit_type', '한도 유형*', 'sel:기본한도,마감한도,추가한도'], ['amount', '금액*', 'num'], ['approval_basis', '승인 근거*'], ['approver', '승인자']] }
+};
+function vForm(table, existingIds) {
+  var d = VFORMS[table];
+  var inp = function (f) {
+    var t = f[2] || '';
+    if (t.indexOf('sel:') === 0) return '<label>' + f[1] + '<select name="' + f[0] + '">' + t.substring(4).split(',').map(function (o) { return '<option>' + o + '</option>'; }).join('') + '</select></label>';
+    return '<label>' + f[1] + '<input name="' + f[0] + '" ' + (t === 'date' ? 'type="date"' : t === 'num' ? 'inputmode="numeric"' : '') + '></label>';
+  };
+  return '<form class="f vform" data-t="' + table + '"><label>대상<select name="' + d.id + '"><option value="">새 ' + d.label + '</option>' +
+    existingIds.map(function (i) { return '<option value="' + h(i) + '">' + h(i) + ' 새 버전</option>'; }).join('') + '</select></label>' +
+    d.fields.map(inp).join('') + '<label>적용 시작일*<input type="date" name="valid_from" required></label><label>적용 종료일<input type="date" name="valid_to"></label>' +
+    '<label class="full">변경 사유*<input name="reason" required></label><div class="full"><button class="primary">승인 요청</button> <span class="muted">관리자 승인 후 반영됩니다.</span></div></form>';
+}
+function versionTable(rows, idField) {
+  return table([{ t: 'ID', k: idField }, { t: '버전', f: function (r) { return 'v' + h(r.version_no); } }, { t: '상태', f: function (r) { return badge(r.approval_status); } },
+    { t: '적용기간', f: function (r) { return h(r.valid_from) + ' ~ ' + h(r.valid_to === '9999-12-31' ? '' : r.valid_to); } },
+    { t: '주요 값', wrap: true, f: function (r) { return h([r.collateral_type || r.limit_type || r.has_guarantee, r.set_amount !== undefined ? '설정 ' + won(r.set_amount) : '', r.recognized_amount ? '인정 ' + won(r.recognized_amount) : '', r.amount ? won(r.amount) : '', r.scope || ''].filter(Boolean).join(' / ')); } },
+    { t: '요청·승인', f: function (r) { return h(r.requested_by) + '<br>' + h(r.approved_by || '') + (r.reject_reason ? '<br>반려: ' + h(r.reject_reason) : ''); } }, { t: '사유', k: 'change_reason', wrap: true }],
+    rows.slice().sort(function (a, b) { return a[idField] < b[idField] ? -1 : a[idField] > b[idField] ? 1 : b.version_no - a.version_no; }));
+}
+function pageMasterDetail(wsId) {
+  loading();
+  call('api_masterDetail', wsId).then(function (d) {
+    var w = d.ws;
+    var ids = function (rows, f) { return rows.map(function (r) { return r[f]; }).filter(function (v, i, a) { return a.indexOf(v) === i; }); };
+    var html = '<div class="row" style="justify-content:space-between"><h1>기초자료 — ' + h(w.wholesaler_id + ' ' + w.name) + '</h1><a href="#/ws/' + encodeURIComponent(wsId) + '">통합 상세 보기 →</a></div><div class="grid">';
+    html += '<div class="card"><h2>기본정보 <span class="muted" style="font-size:12px">행 버전 ' + h(w.row_version) + '</span></h2><form class="f" id="basic">' +
+      '<label>상호*<input name="name" value="' + h(w.name) + '"></label><label>대표자<input name="representative" value="' + h(w.representative) + '"></label>' +
+      '<label>취급 부류<input name="categories" value="' + h(w.categories) + '"></label><label>결제 그룹<input name="settle_group" value="' + h(w.settle_group) + '"></label>' +
+      '<label class="full">비고<input name="note" value="' + h(w.note) + '"></label><label class="full">변경 사유*<input name="reason" required></label>' +
+      '<div class="full"><button class="primary">저장</button></div></form></div>';
+    html += '<div class="card"><h2>영업 상태</h2>' + table([{ t: '상태', f: function (r) { return badge(r.status); } }, { t: '기간', f: function (r) { return h(r.valid_from) + ' ~ ' + h(r.valid_to === '9999-12-31' ? '' : r.valid_to); } }, { t: '사유', k: 'change_reason', wrap: true }], d.statusHist) +
+      '<form class="f" id="status"><label>새 상태<select name="status">' + d.statuses.map(function (s) { return '<option>' + s + '</option>'; }).join('') + '</select></label>' +
+      '<label>적용 시작일*<input type="date" name="valid_from" required></label><label class="full">사유*<input name="reason" required></label><div class="full"><button>상태 변경</button></div></form></div>';
+    html += '<div class="card"><h2>담당 경매사</h2>' + table([{ t: '경매사', k: 'user_id' }, { t: '기간', f: function (r) { return h(r.valid_from) + ' ~ ' + h(r.valid_to === '9999-12-31' ? '' : r.valid_to); } }], d.assignments) +
+      '<form class="f" id="assign"><label>경매사<select name="user_id">' + d.auctioneers.map(function (u) { return '<option value="' + h(u.user_id) + '">' + h(u.name) + '</option>'; }).join('') + '</select></label>' +
+      '<label>적용 시작일*<input type="date" name="valid_from" required></label><label class="full">사유*<input name="reason" required></label><div class="full"><button>담당 지정</button></div></form></div>';
+    ['M_LIMIT', 'M_COLLATERAL', 'M_GUARANTEE'].forEach(function (t) {
+      var rows = t === 'M_LIMIT' ? d.limits : t === 'M_COLLATERAL' ? d.collaterals : d.guarantees;
+      html += '<div class="card wide"><h2>' + VFORMS[t].label + ' (버전 이력)</h2>' + versionTable(rows, VFORMS[t].id) + '<h3>변경 요청</h3>' + vForm(t, ids(rows, VFORMS[t].id)) +
+        (t === 'M_LIMIT' ? '<div class="note">기본·마감·추가한도는 각각 별도로 관리하며 합산하지 않습니다(내부 규정 확인 전).</div>' : '') +
+        (t === 'M_COLLATERAL' ? '<div class="note">설정금액·평가금액·내부 인정금액을 구분해 입력하세요. 설정금액을 회수 가능액으로 보지 않습니다.</div>' : '') + '</div>';
+    });
+    if (can('ws.viewGuarantorPII')) html += '<div class="card"><h2>보증인 등록(개인정보)</h2><form class="f" id="gr"><label>성명*<input name="name" required></label><label>관계<input name="relation"></label><label class="full">사유*<input name="reason" required></label><div class="full"><button>등록 후 참조번호 받기</button></div></form><div id="grOut"></div><div class="note">보증인 개인정보는 별도 저장소에 보관하며 필요한 범위만 입력하세요.</div></div>';
+    if (can('evidence.upload')) html += '<div class="card"><h2>증빙 업로드</h2>' + table([{ t: '파일', k: 'file_name' }, { t: '유형', k: 'doc_type' }, { t: '대상', k: 'target_id' }, { t: '해시', f: function (r) { return h(String(r.file_hash).substring(0, 12)); } }], d.evidence) +
+      '<form class="f" id="ev"><label>파일*<input type="file" name="file" required></label><label>문서 유형*<input name="doc_type" placeholder="예: 감정평가서" required></label><label>대상 ID<input name="target_id" placeholder="예: C' + h(wsId) + '-01"></label><div class="full"><button>업로드</button> <span class="muted">작은 파일 권장(요청 크기 제한 확인 필요)</span></div></form></div>';
+    html += '</div>';
+    view(html);
+
+    var reload = function (msg) { toast(msg); pageMasterDetail(wsId); };
+    var err = function (e) { toast(e.message, true); };
+    document.getElementById('basic').onsubmit = function (e) {
+      e.preventDefault(); var o = formData(e.target), reason = o.reason; delete o.reason;
+      call('api_updateWholesaler', wsId, o, w.row_version, reason).then(function () { reload('저장했습니다.'); }).catch(err);
+    };
+    document.getElementById('status').onsubmit = function (e) {
+      e.preventDefault(); var o = formData(e.target);
+      call('api_changeWsStatus', wsId, o.status, o.valid_from, o.reason).then(function () { reload('상태를 변경했습니다.'); }).catch(err);
+    };
+    document.getElementById('assign').onsubmit = function (e) {
+      e.preventDefault(); var o = formData(e.target);
+      call('api_setAssignment', wsId, o.user_id, o.valid_from, o.reason).then(function () { reload('담당을 지정했습니다.'); }).catch(err);
+    };
+    Array.prototype.forEach.call(document.querySelectorAll('form.vform'), function (f) {
+      f.onsubmit = function (e) {
+        e.preventDefault(); var o = formData(f), reason = o.reason; delete o.reason; o.wholesaler_id = wsId;
+        call('api_submitVersion', f.getAttribute('data-t'), o, reason).then(function () { reload('승인 요청했습니다.'); }).catch(err);
+      };
+    });
+    var gr = document.getElementById('gr');
+    if (gr) gr.onsubmit = function (e) {
+      e.preventDefault(); var o = formData(gr), reason = o.reason; delete o.reason;
+      call('api_createGuarantor', o, reason).then(function (r) { document.getElementById('grOut').innerHTML = '<div class="note">참조번호 <b>' + h(r.guarantor_ref) + '</b> — 연대보증 변경 요청의 보증인 참조에 입력하세요.</div>'; }).catch(err);
+    };
+    var ev = document.getElementById('ev');
+    if (ev) ev.onsubmit = function (e) {
+      e.preventDefault(); var file = ev.elements.file.files[0];
+      if (!file) return;
+      var rd = new FileReader();
+      rd.onload = function () {
+        call('api_uploadEvidence', { wholesaler_id: wsId, file_name: file.name, mime_type: file.type, base64: String(rd.result).split(',')[1],
+          doc_type: ev.elements.doc_type.value, target_id: ev.elements.target_id.value }).then(function () { reload('업로드했습니다.'); }).catch(err);
+      };
+      rd.readAsDataURL(file);
+    };
+  }).catch(fail);
+}
+
+/* ───── 승인 대기 ───── */
+function pageApprovals() {
+  loading();
+  call('api_listPending').then(function (rows) {
+    var html = '<h1>기초자료 승인 대기</h1>' + (can('master.approve') ? '' : '<div class="note">승인 권한이 없습니다. 본인 요청의 진행 상태만 확인할 수 있습니다.</div>');
+    html += table([{ t: '구분', k: 'tableLabel' }, { t: '중도매인', f: function (r) { return '<a href="#/master/' + encodeURIComponent(r.wholesaler_id) + '">' + h(r.wholesaler_id) + '</a>'; } },
+      { t: 'ID·버전', f: function (r) { return h(r.id) + ' v' + h(r.version_no); } }, { t: '적용 시작', k: 'valid_from' },
+      { t: '내용', wrap: true, f: function (r) { return h(JSON.stringify(pickShown(r))); } }, { t: '요청', f: function (r) { return h(r.requested_by) + '<br>' + h(r.requested_at); } }, { t: '사유', k: 'change_reason', wrap: true },
+      { t: '처리', f: function (r, i) { return can('master.approve') ? '<button class="primary" data-a="승인" data-k="' + h(r.table + '|' + r.id + '|' + r.version_no) + '">승인</button> <button class="danger" data-a="반려" data-k="' + h(r.table + '|' + r.id + '|' + r.version_no) + '">반려</button>' : ''; } }],
+      rows, { empty: '승인 대기 없음' });
+    html += '<div class="note">요청자 본인은 승인할 수 없습니다. 승인하면 같은 ID의 이전 버전은 새 버전 시작 전날로 종료됩니다.</div>';
+    view(html);
+    document.getElementById('view').onclick = function (e) {
+      var b = e.target.closest('button[data-a]'); if (!b) return;
+      var k = b.getAttribute('data-k').split('|'), a = b.getAttribute('data-a');
+      var reason = a === '반려' ? prompt('반려 사유를 입력하세요') : (prompt('승인 의견(선택)') || '');
+      if (a === '반려' && !reason) return;
+      b.disabled = true;
+      call('api_decideVersion', k[0], k[1], Number(k[2]), a, reason).then(function () { toast(a + ' 처리했습니다.'); pageApprovals(); })
+        .catch(function (err) { b.disabled = false; toast(err.message, true); });
+    };
+  }).catch(fail);
+}
+function pickShown(r) {
+  var o = {};
+  ['collateral_type', 'set_amount', 'appraised_amount', 'recognized_amount', 'expiry_date', 'limit_type', 'amount', 'approval_basis', 'has_guarantee', 'scope', 'guarantee_limit', 'period_to']
+    .forEach(function (k) { if (r[k] !== undefined && r[k] !== '') o[k] = r[k]; });
+  return o;
+}
+
+/* ───── 가져오기·오류 점검 ───── */
+function pageImport() {
+  loading();
+  call('api_importStatus').then(function (d) {
+    var st = d.status;
+    var html = '<div class="row" style="justify-content:space-between"><h1>데이터 가져오기·오류 점검</h1>' +
+      (can('import.run') ? '<button class="primary" id="run">지금 처리 실행</button>' : '') + '</div>';
+    html += '<div class="tiles">' + tile('대기 파일', d.inboxCount, '개') + tile('최신 기준일', '', st.latest_base_date || '—') +
+      tile('데이터 이상', Number(st.issue_count || 0), '건') + tile('대사 불일치', d.recon.filter(function (r) { return r.result !== '일치'; }).length, '항목') + '</div>';
+    if (d.pipelineState) html += '<div class="note warn">처리 진행 중/중단됨: 단계 ' + h(d.pipelineState.stage) + ' (실행 ' + h(d.pipelineState.runId) + '). 다시 실행하면 이 단계부터 이어서 처리합니다.</div>';
+    if (st.last_failure) html += '<div class="note bad">최근 실패: ' + h(st.last_failure_at) + ' ' + h(st.last_failure) + '</div>';
+    html += '<div class="note">원천 파일(CSV)을 Drive의 <b>01_가져오기_대기</b> 폴더에 넣으면 정기 처리 때 적재합니다. 같은 내용의 파일은 다시 적재하지 않고, 같은 거래번호의 다른 내용은 거부합니다(정정은 새 거래번호로).</div>';
+    html += '<div class="grid"><div class="card wide"><h2>가져오기 배치 (최근 100)</h2>' + table([
+      { t: '파일', k: 'file_name' }, { t: '상태', f: function (r) { return badge(r.status); } }, { t: '기간', f: function (r) { return h(r.date_from) + (r.date_to ? '~' + h(r.date_to) : ''); } },
+      { t: '읽음', num: true, f: function (r) { return num(r.row_count); } }, { t: '적재', num: true, f: function (r) { return num(r.accepted_count); } },
+      { t: '중복', num: true, f: function (r) { return num(r.duplicate_count); } }, { t: '거부', num: true, f: function (r) { return num(r.rejected_count); } },
+      { t: '관리합계', f: function (r) { return badge(r.control_result || '—'); } }, { t: '완료', k: 'finished_at' }], d.batches, { id: 'bTbl', onRow: true }) + '<div id="rej"></div></div>';
+    var recSum = {};
+    d.recon.forEach(function (r) { var x = recSum[r.item] = recSum[r.item] || { item: r.item, n: 0, bad: 0 }; x.n++; if (r.result !== '일치') x.bad++; });
+    html += '<div class="card wide"><h2>대사 결과 (최근 집계 ' + h(st.last_calc_run_id || '') + ')</h2>' +
+      table([{ t: '항목', k: 'item' }, { t: '대상 기간 수', num: true, k: 'n' }, { t: '불일치', num: true, k: 'bad' },
+        { t: '결과', f: function (r) { return badge(r.bad ? '불일치' : '일치'); } }], Object.keys(recSum).map(function (k) { return recSum[k]; })) +
+      '<h3>불일치 상세</h3>' + table([
+      { t: '항목', k: 'item' }, { t: '기간', k: 'period' }, { t: '원천', num: true, f: function (r) { return num(r.source_value); } },
+      { t: '시스템', num: true, f: function (r) { return num(r.system_value); } }, { t: '차이', num: true, f: function (r) { return num(r.diff); } },
+      { t: '결과', f: function (r) { return badge(r.result); } }, { t: '비고', k: 'note', wrap: true }],
+      d.recon.filter(function (r) { return r.result !== '일치'; }), { empty: '불일치 없음' }) + '</div>';
+    html += '<div class="card"><h2>데이터 이상 (사유별)</h2>' + table([{ t: '사유', k: 'k' }, { t: '건수', num: true, k: 'v' }],
+      Object.keys(d.dqByReason).map(function (k) { return { k: k, v: d.dqByReason[k] }; }), { empty: '이상 없음' }) +
+      '<h3>최근 100건</h3>' + table([{ t: '중도매인', k: 'wholesaler_id' }, { t: '일자', k: 'date' }, { t: '상태', f: function (r) { return badge(r.status); } }, { t: '내용', k: 'detail', wrap: true }], d.dqRecent) + '</div>';
+    html += '<div class="card"><h2>작업 로그 (최근 30)</h2>' + table([{ t: '단계', k: 'stage' }, { t: '상태', f: function (r) { return badge(r.status); } }, { t: '종료', k: 'finished_at' }, { t: '내용', k: 'message', wrap: true }], d.jobs) + '</div></div>';
+    view(html);
+    bindRows('bTbl', d.batches, function (b) {
+      call('api_batchRejects', b.batch_id).then(function (rows) {
+        document.getElementById('rej').innerHTML = '<h3>' + h(b.file_name) + ' — ' + h(b.message) + '</h3>' +
+          table([{ t: '행', num: true, k: 'line_no' }, { t: '오류', k: 'error_code' }, { t: '내용', k: 'error_message', wrap: true }, { t: '원문', k: 'raw_line', wrap: true }], rows, { empty: '거부된 행 없음' });
+      }).catch(function (e) { toast(e.message, true); });
+    });
+    var run = document.getElementById('run');
+    if (run) run.onclick = function () {
+      run.disabled = true; run.textContent = '처리 중…';
+      call('api_runPipelineNow').then(function (r) { toast('처리 ' + r.status + (r.message ? ': ' + r.message : '')); pageImport(); })
+        .catch(function (e) { toast(e.message, true); pageImport(); });
+    };
+  }).catch(fail);
+}
+
+/* ───── 사용자·권한 ───── */
+function pageUsers() {
+  loading();
+  call('api_listUsers').then(function (rows) {
+    var roles = { AUCTIONEER: '경매사', CREDIT: '채권담당', ADMIN: '관리자', VIEWER: '조회자' };
+    view('<h1>사용자·권한</h1>' + table([{ t: '이메일', k: 'user_id' }, { t: '이름', k: 'name' }, { t: '역할', f: function (r) { return h(roles[r.role] || r.role); } }, { t: '상태', f: function (r) { return badge(r.status === '사용' ? '정상' : '중지'); } }], rows, { id: 'uTbl', onRow: true }) +
+      '<div class="card"><h2>등록·수정</h2><form class="f" id="uf"><label>이메일*<input name="user_id" required></label><label>이름*<input name="name" required></label>' +
+      '<label>역할<select name="role">' + Object.keys(roles).map(function (k) { return '<option value="' + k + '">' + roles[k] + '</option>'; }).join('') + '</select></label>' +
+      '<label>상태<select name="status"><option>사용</option><option>중지</option></select></label><label class="full">변경 사유*<input name="reason" required></label>' +
+      '<div class="full"><button class="primary">저장</button></div></form><div class="note">권한은 서버에서 확인합니다. 저장소(시트)는 사용자에게 직접 공유하지 마세요.</div></div>');
+    bindRows('uTbl', rows, function (u) {
+      var f = document.getElementById('uf');
+      f.user_id.value = u.user_id; f.name.value = u.name; f.role.value = u.role; f.status.value = u.status;
+    });
+    document.getElementById('uf').onsubmit = function (e) {
+      e.preventDefault(); var o = formData(e.target), reason = o.reason; delete o.reason;
+      call('api_saveUser', o, reason).then(function () { toast('저장했습니다.'); pageUsers(); }).catch(function (err) { toast(err.message, true); });
+    };
+  }).catch(fail);
+}
+
+/* ───── 이력 ───── */
+function pageAudit() {
+  view('<h1>변경·처리 이력</h1><div class="tabs"><button id="tA" class="on">변경 이력</button><button id="tB">접근 기록</button></div>' +
+    '<form class="row" id="af"><input name="table" placeholder="테이블(예: M_LIMIT)"><input name="key" placeholder="키 포함(예: W0123)"><input name="user" placeholder="사용자">' +
+    '<input type="date" name="from"><input type="date" name="to"><button>조회</button></form><div id="ares"></div>');
+  var loadA = function () {
+    call('api_auditLog', formData(document.getElementById('af'))).then(function (rows) {
+      document.getElementById('ares').innerHTML = table([{ t: '일시', k: 'at' }, { t: '사용자', k: 'user_id' }, { t: '작업', k: 'action' }, { t: '테이블', k: 'table_name' }, { t: '키', k: 'record_key' },
+        { t: '사유', k: 'reason', wrap: true }, { t: '변경 후', wrap: true, f: function (r) { return '<span class="muted">' + h(String(r.after_json).substring(0, 160)) + '</span>'; } }], rows);
+    }).catch(fail);
+  };
+  var loadB = function () {
+    call('api_accessLog', {}).then(function (rows) {
+      document.getElementById('ares').innerHTML = table([{ t: '일시', k: 'at' }, { t: '사용자', k: 'user_id' }, { t: '작업', k: 'action' }, { t: '대상', k: 'target' }, { t: '결과', f: function (r) { return badge(r.result === '허용' ? '정상' : '실패'); } }, { t: '내용', k: 'detail', wrap: true }], rows);
+    }).catch(fail);
+  };
+  document.getElementById('af').onsubmit = function (e) { e.preventDefault(); loadA(); };
+  document.getElementById('tA').onclick = function () { this.className = 'on'; document.getElementById('tB').className = ''; document.getElementById('af').style.display = ''; loadA(); };
+  document.getElementById('tB').onclick = function () { this.className = 'on'; document.getElementById('tA').className = ''; document.getElementById('af').style.display = 'none'; loadB(); };
+  loadA();
+}
+
+/* ───── 시작 ───── */
+call('api_bootstrap').then(function (b) {
+  S.boot = b;
+  document.getElementById('appVer').textContent = 'v' + b.app.version;
+  document.getElementById('who').textContent = b.user.name + ' (' + b.user.roleLabel + ')';
+  route();
+}).catch(function (e) {
+  document.getElementById('who').textContent = '';
+  view('<div class="note bad"><b>접속할 수 없습니다.</b><br>' + h(e.message || e) + '</div>');
+});
+</script>
