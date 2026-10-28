@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <title>중도매인 통합관리</title>
+  <?!= include_('Styles'); ?>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">중도매인 통합관리 <span class="ver" id="appVer"></span></div>
+    <nav id="nav"></nav>
+    <div class="who" id="who">사용자 확인 중…</div>
+  </header>
+  <div class="statusbar" id="statusbar"></div>
+  <main id="view"><p class="muted">불러오는 중…</p></main>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <?!= include_('Client'); ?>
+</body>
+</html>
