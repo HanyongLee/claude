@@ -26,6 +26,7 @@ function loadVirtualData_(opt) {
     });
     var inbox = folder_('INBOX');
     g.files.forEach(function (f) { inbox.createFile(f.name, f.content, MimeType.CSV); });
+    loadVirtualDocs_(ownerAsUser_());
     audit_(ownerAsUser_(), 'LOAD_VIRTUAL_DATA', 'DB_MASTER', '*', 'virtual', null, g.summary, '가상 데이터 적재');
     Logger.log(JSON.stringify(g.summary));
     return g.summary;
@@ -112,4 +113,53 @@ function runPhase1Checks() {
 
   Logger.log(R.map(function (r) { return '[' + r.result + '] 시나리오' + r.scenario + ' ' + r.check + (r.detail ? ' — ' + r.detail : ''); }).join('\n'));
   return R;
+}
+
+/**
+ * 가상 매뉴얼·서식·상황 코드·절차 (모두 가상. 실제 규정이 아니다)
+ * - SIT-OVD-30 (연체 30일 이상)        : 가상 매뉴얼 v1 에 절차 3단계 + 서식 2종 연결
+ * - SIT-TURN-DROP (회전율 저하 확인)    : 절차 미등록 → '확인 필요' 표시 검증용(시나리오 6)
+ * - SIT-CONFLICT (복수 징후)            : 서로 다른 두 문서에 절차 → '충돌' 표시 검증용
+ */
+function loadVirtualDocs_(user) {
+  var forms = folder_('FORMS');
+  var mk = function (name, text) { return forms.createFile(name, text, 'text/plain').getId(); };
+  var manualId = mk('(가상)채권관리업무매뉴얼_v1.txt', '(가상) 채권관리 업무매뉴얼 v1 — 테스트용 본문. 실제 규정이 아님.');
+  var manual2Id = mk('(가상)여신관리지침_v2.txt', '(가상) 여신관리지침 v2 — 테스트용 본문. 실제 규정이 아님.');
+  var form1 = mk('(가상)결제계획확인서.txt', '[가상 서식] 결제계획 확인서\n관리건: {{관리건ID}}\n중도매인: {{중도매인코드}} {{상호}} (대표 {{대표자}})\n기준일: {{기준일}}\n미수금: {{미수금}}원 / 연체금액: {{연체금액}}원 ({{연체일수}}일)\n담당 경매사: {{담당경매사}}\n작성일: {{작성일}}  작성자: {{작성자}}\n결제계획: \n');
+  var form2 = mk('(가상)담보보강요청서.txt', '[가상 서식] 담보 보강 요청서\n관리건: {{관리건ID}} / {{상호}}\n기준일 {{기준일}} 미수금 {{미수금}}원\n요청 내용: \n');
+  var now = nowStr_(), a = newAuditFields_(user);
+  var docs = [
+    { doc_id: 'DOC-MANUAL-CREDIT', doc_name: '(가상)채권관리 업무매뉴얼', doc_type: '매뉴얼', owner_dept: '(가상)채권팀' },
+    { doc_id: 'DOC-GUIDE-LOAN', doc_name: '(가상)여신관리지침', doc_type: '매뉴얼', owner_dept: '(가상)심사팀' },
+    { doc_id: 'FORM-PAYPLAN', doc_name: '(가상)결제계획확인서', doc_type: '서식', owner_dept: '(가상)채권팀' },
+    { doc_id: 'FORM-COLLATERAL', doc_name: '(가상)담보보강요청서', doc_type: '서식', owner_dept: '(가상)채권팀' }
+  ].map(function (d) { return Object.assign({ note: '가상' }, d, a); });
+  appendObjects_('DB_MASTER', 'M_DOC', docs);
+  var hash = function (id) { return sha256Hex_(DriveApp.getFileById(id).getBlob().getBytes()); };
+  appendObjects_('DB_MASTER', 'M_DOC_VER', [
+    { doc_id: 'DOC-MANUAL-CREDIT', version: 'v1', effective_from: '2025-01-01', effective_to: APP.OPEN_END, file_id: manualId, file_hash: hash(manualId), note: '가상' },
+    { doc_id: 'DOC-GUIDE-LOAN', version: 'v2', effective_from: '2026-01-01', effective_to: APP.OPEN_END, file_id: manual2Id, file_hash: hash(manual2Id), note: '가상' },
+    { doc_id: 'FORM-PAYPLAN', version: 'v3', effective_from: '2025-06-01', effective_to: APP.OPEN_END, file_id: form1, file_hash: hash(form1), note: '가상' },
+    { doc_id: 'FORM-COLLATERAL', version: 'v1', effective_from: '2025-01-01', effective_to: APP.OPEN_END, file_id: form2, file_hash: hash(form2), note: '가상' }
+  ].map(function (d) { return Object.assign(d, a); }));
+  appendObjects_('DB_MASTER', 'M_SITUATION', [
+    { situation_code: 'SIT-OVD-30', label: '연체 30일 이상', condition_json: JSON.stringify({ signals: ['S03'], min_overdue_days: 30 }), note: '가상' },
+    { situation_code: 'SIT-OVD-NEW', label: '연체 발생(채권 검토 필요)', condition_json: JSON.stringify({ signals: ['S03'], result_class: '채권 검토 필요' }), note: '가상' },
+    { situation_code: 'SIT-TURN-DROP', label: '회전율 저하 확인', condition_json: JSON.stringify({ signals: ['S01'] }), note: '가상 — 절차 미등록(확인 필요 검증용)' },
+    { situation_code: 'SIT-MULTI', label: '복수 징후', condition_json: JSON.stringify({ signals: ['S07'] }), note: '가상 — 두 문서 충돌 검증용' }
+  ].map(function (d) { return Object.assign(d, a); }));
+  var steps = [
+    { proc_step_id: 'PS-OVD-1', situation_code: 'SIT-OVD-NEW', step_no: 1, content: '(가상) 중도매인에게 결제계획 확인서를 받는다', checks: '결제 예정일·금액·방법', doc_id: 'DOC-MANUAL-CREDIT', doc_version: 'v1', article: '제12조 제1항', page: '34' },
+    { proc_step_id: 'PS-OVD-2', situation_code: 'SIT-OVD-NEW', step_no: 2, content: '(가상) 담보 평가 최신성을 확인하고 필요 시 담보 보강을 요청한다', checks: '최종 평가일 1년 초과 여부', doc_id: 'DOC-MANUAL-CREDIT', doc_version: 'v1', article: '제15조', page: '41' },
+    { proc_step_id: 'PS-OVD-3', situation_code: 'SIT-OVD-NEW', step_no: 3, content: '(가상) 연체 30일 경과 시 팀장 보고 후 거래 조건 변경을 검토한다', checks: '승인권자 결재', doc_id: 'DOC-MANUAL-CREDIT', doc_version: 'v1', article: '제16조', page: '43' },
+    { proc_step_id: 'PS-MULTI-A', situation_code: 'SIT-MULTI', step_no: 1, content: '(가상·문서A) 복수 징후 시 즉시 한도 재심사', checks: '', doc_id: 'DOC-MANUAL-CREDIT', doc_version: 'v1', article: '제20조', page: '50' },
+    { proc_step_id: 'PS-MULTI-B', situation_code: 'SIT-MULTI', step_no: 1, content: '(가상·문서B) 복수 징후 시 30일 관찰 후 재심사', checks: '', doc_id: 'DOC-GUIDE-LOAN', doc_version: 'v2', article: '제7조', page: '12' }
+  ].map(function (d) { return Object.assign(d, a); });
+  appendObjects_('DB_MASTER', 'M_PROCEDURE', steps);
+  appendObjects_('DB_MASTER', 'M_PROC_FORM', [
+    { proc_step_id: 'PS-OVD-1', form_doc_id: 'FORM-PAYPLAN', required: true },
+    { proc_step_id: 'PS-OVD-2', form_doc_id: 'FORM-COLLATERAL', required: false }
+  ].map(function (d) { return Object.assign(d, a); }));
+  void now;
 }

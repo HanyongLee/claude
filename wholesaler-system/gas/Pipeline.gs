@@ -46,6 +46,13 @@ function runPipeline_(trigger) {
       if (timeLeft() < 90000) return pause_(state, '집계 단계를 다음 실행에서 진행');
       stageStart = nowStr_();
       aggregateAll_(state.runId, trigger);
+      state.stage = 'SIGNALS';
+      setProp_(PIPE_STATE_KEY, JSON.stringify(state));
+    }
+    if (state.stage === 'SIGNALS') {
+      if (timeLeft() < 60000) return pause_(state, '지표·신호 단계를 다음 실행에서 진행');
+      stageStart = nowStr_();
+      evaluateAll_(state.runId, trigger);
     }
     PropertiesService.getScriptProperties().deleteProperty(PIPE_STATE_KEY);
     clearContinueTriggers_();

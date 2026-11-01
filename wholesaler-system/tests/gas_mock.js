@@ -51,6 +51,8 @@ function createGas(opts) {
         getDataAsString: () => file.bytes.toString('utf8')
       }),
       moveTo: (folder) => { file.parentId = folder.getId(); return wrapFile(file); },
+      getMimeType: () => file.mime || '',
+      setContent: (t) => { file.bytes = Buffer.from(String(t), 'utf8'); return wrapFile(file); },
       makeCopy: (name, folder) => {
         const c = { ...file, id: newId('fi'), name, parentId: folder ? folder.getId() : file.parentId, bytes: Buffer.from(file.bytes) };
         files.set(c.id, c);

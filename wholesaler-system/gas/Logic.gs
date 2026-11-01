@@ -534,7 +534,16 @@ var PERMS = {
   'user.manage': ['ADMIN'],
   'import.view': ['CREDIT', 'ADMIN'],
   'import.run': ['ADMIN'],
-  'audit.view': ['ADMIN']
+  'audit.view': ['ADMIN'],
+  'work.view': ['AUCTIONEER', 'CREDIT', 'ADMIN', 'VIEWER'],
+  'trend.write': ['AUCTIONEER', 'CREDIT', 'ADMIN'],
+  'signal.flag': ['AUCTIONEER', 'CREDIT', 'ADMIN'],
+  'case.manage': ['CREDIT', 'ADMIN'],
+  'approval.decide': ['ADMIN'],
+  'form.draft': ['AUCTIONEER', 'CREDIT', 'ADMIN'],
+  'form.blank': ['AUCTIONEER', 'CREDIT', 'ADMIN', 'VIEWER'],
+  'settings.edit': ['ADMIN'],
+  'docs.manage': ['ADMIN']
 };
 
 function can_(role, action) {

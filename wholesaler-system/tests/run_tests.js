@@ -10,7 +10,7 @@ const { createGas } = require('./gas_mock');
 
 const GAS_DIR = path.join(__dirname, '..', 'gas');
 const ORDER = ['Config.gs', 'Logic.gs', 'Db.gs', 'Audit.gs', 'Auth.gs', 'Setup.gs', 'Pipeline.gs', 'Backup.gs',
-  'Master.gs', 'Api.gs', 'VirtualData.gs', 'TestData.gs', 'Main.gs'];
+  'Master.gs', 'Metrics.gs', 'Signals.gs', 'Work.gs', 'Docs.gs', 'Api.gs', 'VirtualData.gs', 'TestData.gs', 'Main.gs'];
 const OWNER = 'owner@example.invalid';
 const START = '2024-10-01', END = '2026-10-27';
 
@@ -24,7 +24,11 @@ function section(t) { results.push('\n■ ' + t); }
 
 function boot() {
   const gas = createGas({ ownerEmail: OWNER });
-  const ctx = vm.createContext(Object.assign({}, gas.globals));
+  // 검증 기준 '오늘'을 2026-10-28 09:00(KST)로 고정한다(가상 자료 종료일 2026-10-27 의 다음 날)
+  const FROZEN = new Date('2026-10-28T09:00:00+09:00').getTime();
+  let tick = 0;
+  class FrozenDate extends Date { constructor(...a) { if (!a.length) super(FROZEN + (tick++) * 1000); else super(...a); } static now() { return FROZEN; } }
+  const ctx = vm.createContext(Object.assign({ Date: FrozenDate }, gas.globals));
   const code = ORDER.map(f => fs.readFileSync(path.join(GAS_DIR, f), 'utf8')).join('\n;\n');
   vm.runInContext(code, ctx, { filename: 'gas-bundle.js' });
   ctx.__gas = gas;
@@ -363,7 +367,7 @@ section('실패 기록·재처리·실행시간 분할');
 section('백업·복구');
 {
   const bk = run(ctx, 'backupNow()');
-  ok(bk.copied.length === 5, '저장소 5개(DB_MASTER·PII·RAW·AGG·LOG) 사본 생성', bk.folder);
+  ok(bk.copied.length === 6, '저장소 6개(MASTER·PII·RAW·AGG·WORK·LOG) 사본 생성', bk.folder);
   const masterBackup = bk.copied.find(x => x.startsWith('DB_MASTER')).split('→')[1];
   run(ctx, `api_updateWholesaler('W0102', { note: '백업 이후 변경' }, ${table(ctx, 'DB_MASTER', 'M_WHOLESALER').find(x => x.wholesaler_id === 'W0102').row_version}, '테스트')`);
   const rs = run(ctx, `restoreDb('DB_MASTER', ${JSON.stringify(masterBackup)})`);

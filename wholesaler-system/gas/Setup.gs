@@ -21,6 +21,7 @@ function setupSystem() {
       audit_(owner, 'CREATE', 'DB_MASTER', 'M_USER', admin.user_id, null, admin, '초기 관리자 등록');
       report.push('초기 관리자 등록: ' + admin.user_id);
     }
+    report.push('기준값 기본(가정값) 적재: ' + seedSettings_(owner) + '건');
     setProp_('APP_VERSION', APP.VERSION);
     report.push('설정 완료. 다음: (가상 데이터) loadVirtualData → runPipeline → 웹앱 배포');
     Logger.log(report.join('\n'));
@@ -132,4 +133,17 @@ function installTriggers() {
   ScriptApp.newTrigger('triggerDailyPipeline').timeBased().everyDays(1).atHour(6).create();
   ScriptApp.newTrigger('triggerDailyBackup').timeBased().everyDays(1).atHour(2).create();
   return '트리거 설치: 매일 06시 정기 처리, 02시 백업';
+}
+
+/** 없는 설정 키만 가정값으로 넣는다. 이미 입력된 실제 값은 건드리지 않는다. */
+function seedSettings_(user) {
+  invalidate_('DB_MASTER', 'M_SETTING');
+  var have = {};
+  readTable_('DB_MASTER', 'M_SETTING').forEach(function (r) { have[r.key] = true; });
+  var rows = SETTING_DEFAULTS.filter(function (d) { return !have[d[0]]; }).map(function (d) {
+    var r = { key: d[0], value: d[1], label: d[2], unit: d[3], is_assumed: true, note: '가정값(코드 기본). 내부 기준 확인 후 수정' };
+    Object.assign(r, newAuditFields_(user)); return r;
+  });
+  appendObjects_('DB_MASTER', 'M_SETTING', rows);
+  return rows.length;
 }

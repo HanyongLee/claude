@@ -334,6 +334,165 @@ function buildHome_(user) {
     expiring: expiring, dataIssues: Object.keys(dqByWs).map(function (k) { return dqByWs[k]; }),
     batchProblems: batchProblems, pending: pending,
     myList: user.role === 'AUCTIONEER' ? mine.map(function (w) { return { wholesaler_id: w.wholesaler_id, name: w.name, biz_status: w.biz_status }; }) : [],
-    phase2: ['신규 조기 신호', '동향 확인 대기·지연', '채권 조치 대기·지연', '재점검 예정', '담당자별 미처리 업무']
+    work: workQueues_(user)
   };
+}
+
+/* ───────────── 2단계: 신호·관리 건·동향·조치·승인·서식 ───────────── */
+
+function api_workQueues() {
+  return apiCall_('work.view', function (user) { return workQueues_(user); });
+}
+
+function api_caseDetail(caseId) {
+  return apiCall_('work.view', function (user) { return caseDetail_(user, String(caseId || '')); });
+}
+
+function api_openCase(wsId, reason) {
+  return apiCall_('case.manage', function (user) { return openCaseManually_(user, String(wsId || ''), reason); });
+}
+
+function api_saveTrend(o, submit) {
+  return apiCall_('trend.write', function (user) {
+    var c = findCase_(String((o || {}).case_id || ''));
+    requireWsAccess_(user, c.wholesaler_id);
+    return saveTrendReport_(user, o || {}, !!submit);
+  });
+}
+
+function api_flagFalseAlarm(signalId, reason, confirm) {
+  return apiCall_('signal.flag', function (user) {
+    var s = readTable_('DB_WORK', 'T_SIGNAL').filter(function (r) { return r.signal_id === signalId; })[0];
+    if (!s) throw new Error('신호를 찾을 수 없습니다.');
+    requireWsAccess_(user, s.wholesaler_id);
+    return flagFalseAlarm_(user, signalId, reason, !!confirm);
+  });
+}
+
+function api_createAction(o) {
+  return apiCall_('case.manage', function (user) { return createAction_(user, o || {}); });
+}
+function api_requestApproval(actionId) {
+  return apiCall_('case.manage', function (user) { return requestApproval_(user, actionId); });
+}
+function api_decideApproval(approvalId, decision, reason) {
+  return apiCall_('approval.decide', function (user) { return decideApproval_(user, approvalId, decision, reason); });
+}
+function api_completeAction(actionId, result, doneDate) {
+  return apiCall_('case.manage', function (user) { return completeAction_(user, actionId, result, doneDate); });
+}
+function api_closeCase(caseId, reason, recheckDate, summary) {
+  return apiCall_('case.manage', function (user) { return closeCase_(user, caseId, reason, recheckDate, summary); });
+}
+function api_recheckCase(caseId, note) {
+  return apiCall_('case.manage', function (user) { return recheckCase_(user, caseId, note); });
+}
+
+function api_pendingApprovals() {
+  return apiCall_('work.view', function (user) {
+    var names = userNameMap_();
+    var mine = {}; accessibleWs_(user).forEach(function (w) { mine[w.wholesaler_id] = w; });
+    var actions = {}; readTable_('DB_WORK', 'T_ACTION').forEach(function (a) { actions[a.action_id] = a; });
+    return readTable_('DB_WORK', 'T_APPROVAL').filter(function (a) { return a.decision === '대기'; }).map(function (a) {
+      var act = actions[a.action_id] || {};
+      if (!mine[act.wholesaler_id]) return null;
+      return { approval_id: a.approval_id, case_id: a.case_id, action_id: a.action_id, wholesaler_id: act.wholesaler_id, name: mine[act.wholesaler_id].name,
+        action_type: act.action_type, content: act.content, due_date: act.due_date, requested_by: names[a.requested_by] || a.requested_by, requested_at: a.requested_at,
+        basis_snapshot_id: a.basis_snapshot_id, canDecide: can_(user.role, 'approval.decide') && a.requested_by !== user.user_id };
+    }).filter(Boolean);
+  });
+}
+
+function api_createDraftForm(caseId, formDocId) {
+  return apiCall_('form.draft', function (user) { return createDraftForm_(user, caseId, formDocId); });
+}
+function api_blankForm(formDocId) {
+  return apiCall_('form.blank', function (user) { return blankFormLink_(user, formDocId); });
+}
+function api_uploadFinal(caseId, o) {
+  return apiCall_('form.draft', function (user) { return uploadFinalForm_(user, caseId, o || {}); });
+}
+
+/** 동향보고 작성용 빈 양식·기본정보 채운 양식(텍스트) */
+function api_trendFormText(caseId, filled) {
+  return apiCall_('trend.write', function (user) {
+    var c = findCase_(caseId); requireWsAccess_(user, c.wholesaler_id);
+    var v = filled ? placeholderValues_(c) : {};
+    var get = function (k) { return filled ? (v[k] || '') : ''; };
+    var lines = ['[동향보고] 관리건 ' + c.case_id, '중도매인코드: ' + get('중도매인코드') + '  상호: ' + get('상호'), '작성일: ' + get('작성일') + '  작성 경매사: ',
+      '발생 신호·관련 수치: ' + (filled ? readTable_('DB_WORK', 'T_SIGNAL').filter(function (s) { return s.case_id === c.case_id; }).map(function (s) { return s.rule_id + ' ' + s.evidence_json; }).join(' / ') : ''),
+      '기준일: ' + get('기준일') + '  미수금: ' + get('미수금') + '  연체: ' + get('연체금액') + ' (' + get('연체일수') + '일)',
+      '확인일:        확인 방법:        확인 상대방: ', '확인된 사실(사실만):', ' 1.', ' 2.', '영업 상황·결제계획:', '근거자료:', '작성자 의견(사실과 분리):', '추가 확인사항:',
+      '확인 결과 분류: [ ] 일시적 변화  [ ] 지속 관찰  [ ] 채권 검토 필요  [ ] 판정 보류(자료 부족)', '후속 조치 / 담당자 / 기한 / 재점검일:',
+      '※ 공식 원본은 시스템 입력입니다. 이 파일로 제출할 때는 화면에 확인일·결과 분류·재점검일을 입력하고 파일을 첨부하세요.'];
+    logAccess_(user.user_id, filled ? 'trend.form.filled' : 'trend.form.blank', caseId, '허용', '');
+    return { file_name: c.case_id + '_동향보고_' + (filled ? '기본정보' : '빈양식') + '.txt', text: lines.join('\n') };
+  });
+}
+
+/* ───────────── 지표·신호 기준 / 매뉴얼·서식 관리 ───────────── */
+
+function api_settings() {
+  return apiCall_('work.view', function (user) {
+    var rows = readTable_('DB_MASTER', 'M_SETTING').filter(function (r) { return !r.is_deleted; }).map(stripInternal_);
+    return { settings: rows, choices: SETTING_CHOICES, rules: SIGNAL_RULES, canEdit: can_(user.role, 'settings.edit'), status: readStatus_() };
+  });
+}
+function api_updateSetting(key, value, isAssumed, note, reason) {
+  return apiCall_('settings.edit', function (user) { return updateSetting_(user, key, value, isAssumed, note, reason); });
+}
+
+/** 기준값 시뮬레이션: 저장하지 않고 임시 값으로 최신 기준일 신호 건수를 계산 */
+function api_simulateSettings(overrides) {
+  return apiCall_('settings.edit', function () {
+    var settings = readSettings_();
+    Object.keys(overrides || {}).forEach(function (k) { settings[k] = String(overrides[k]); });
+    var st = readStatus_(), base = st.latest_base_date;
+    if (!base) throw new Error('기준일 없음');
+    var daily = readTable_('DB_AGG', 'A_DAILY'), monthly = readTable_('DB_AGG', 'A_MONTHLY'), calendar = readTable_('DB_MASTER', 'M_CALENDAR');
+    var statusHist = readTable_('DB_MASTER', 'M_WS_STATUS_HIST'), limitsAll = readTable_('DB_MASTER', 'M_LIMIT'), balIdx = balanceIndex_(daily);
+    var wholesalers = readTable_('DB_MASTER', 'M_WHOLESALER').filter(function (w) { return !w.is_deleted; });
+    var active = wholesalers.filter(function (w) { return statusOn_(statusHist, w.wholesaler_id, base) === '정상'; }).map(function (w) { return w.wholesaler_id; });
+    var market = marketGrowth_(daily, calendar, active, base), counts = {}, perWs = [];
+    wholesalers.forEach(function (w) {
+      var m = computeMetrics_({ ws: w.wholesaler_id, baseDate: base, daily: daily, monthly: monthly, calendar: calendar, limits: asOfVersions_(limitsAll, 'limit_id', w.wholesaler_id, base),
+        balByDate: balIdx[w.wholesaler_id] || {}, tradeStart: w.trade_start_date, settings: settings, marketGrowth: market });
+      var hits = evaluateSignals_({ settings: settings, metrics: m, bizStatus: statusOn_(statusHist, w.wholesaler_id, base), expiring: expiringFor_(w.wholesaler_id, base, settings) });
+      hits.forEach(function (h) { counts[h.rule_id] = (counts[h.rule_id] || 0) + 1; });
+      if (hits.length) perWs.push({ wholesaler_id: w.wholesaler_id, name: w.name, rules: hits.map(function (h) { return h.rule_id; }).join(',') });
+    });
+    return { base_date: base, counts: counts, wholesalersWithSignals: perWs, total: wholesalers.length, note: '저장되지 않은 시뮬레이션. 과거 기준일 백테스트는 3단계에서 제공' };
+  });
+}
+
+function api_docs() {
+  return apiCall_('work.view', function (user) {
+    var vers = readTable_('DB_MASTER', 'M_DOC_VER').filter(function (v) { return !v.is_deleted; }).map(stripInternal_);
+    var docs = readTable_('DB_MASTER', 'M_DOC').filter(function (d) { return !d.is_deleted; }).map(function (d) {
+      var o = stripInternal_(d); o.versions = vers.filter(function (v) { return v.doc_id === d.doc_id; }); return o;
+    });
+    var today = todayStr_();
+    var situations = readTable_('DB_MASTER', 'M_SITUATION').filter(function (x) { return !x.is_deleted; }).map(function (x) {
+      var o = stripInternal_(x); o.procedures = proceduresFor_(x.situation_code, today); return o;
+    });
+    return { docs: docs, situations: situations, canManage: can_(user.role, 'docs.manage') };
+  });
+}
+function api_registerDoc(o, reason) { return apiCall_('docs.manage', function (user) { return registerDoc_(user, o || {}, reason); }); }
+function api_registerDocVersion(o, reason) { return apiCall_('docs.manage', function (user) { return registerDocVersion_(user, o || {}, reason); }); }
+function api_registerSituation(o, reason) { return apiCall_('docs.manage', function (user) { return registerSituation_(user, o || {}, reason); }); }
+function api_registerProcedure(o, reason) { return apiCall_('docs.manage', function (user) { return registerProcedure_(user, o || {}, reason); }); }
+
+/** 중도매인 통합 상세에 붙일 최신 지표·신호·관리 건 */
+function api_wsWork(wsId) {
+  return apiCall_('work.view', function (user) {
+    requireWsAccess_(user, wsId);
+    var st = readStatus_(), base = st.signal_base_date || st.latest_base_date || '';
+    var metrics = readTable_('DB_AGG', 'A_METRIC').filter(function (m) { return m.wholesaler_id === wsId && m.base_date === base; }).map(stripInternal_);
+    var signals = readTable_('DB_WORK', 'T_SIGNAL').filter(function (s) { return s.wholesaler_id === wsId; }).map(function (s) {
+      var o = stripInternal_(s); o.label = SIGNAL_RULES[s.rule_id] ? SIGNAL_RULES[s.rule_id].label : s.rule_id; o.evidence = JSON.parse(s.evidence_json || '{}'); delete o.evidence_json; delete o.params_json; return o;
+    });
+    var cases = readTable_('DB_WORK', 'T_CASE').filter(function (c) { return c.wholesaler_id === wsId && !c.is_deleted; }).map(stripInternal_);
+    return { base_date: base, metrics: metrics, signals: signals, cases: cases, params: st.signal_params ? JSON.parse(st.signal_params) : {} };
+  });
 }

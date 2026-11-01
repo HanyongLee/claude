@@ -302,3 +302,32 @@ function uploadEvidence_(user, o) {
   logAccess_(user.user_id, 'evidence.upload', row.evidence_id, '허용', safeName);
   return stripInternal_(row);
 }
+
+/* ───────────── 운영 기준값 ───────────── */
+
+var SETTING_CHOICES = {
+  LIMIT_COMBINE: ['미확인', '기본한도만', '기본+추가', '전체합산'],
+  CATEGORY_AR_SPLIT: ['불가', '가능'],
+  OVERDUE_DEFINITION: ['원천값']
+};
+
+/** 기준값 변경: 값·가정 여부·비고. 변경 전후는 L_AUDIT 에 남고, 신호에는 판정 시점 값(params_json)이 저장된다. */
+function updateSetting_(user, key, value, isAssumed, note, reason) {
+  requireText_(reason, '변경 사유');
+  return withLock_(function () {
+    invalidate_('DB_MASTER', 'M_SETTING');
+    var row = readTable_('DB_MASTER', 'M_SETTING').filter(function (r) { return r.key === key && !r.is_deleted; })[0];
+    if (!row) throw new Error('없는 설정 키입니다: ' + key);
+    var v = String(value === undefined || value === null ? '' : value).trim();
+    if (SETTING_CHOICES[key]) {
+      if (key === 'CATEGORY_AR_SPLIT' ? !(v === '불가' || v.indexOf('가능') === 0) : SETTING_CHOICES[key].indexOf(v) < 0)
+        throw new Error(key + ' 값은 ' + SETTING_CHOICES[key].join(' | ') + ' 중 하나입니다.');
+    } else if (!/^[A-Z_]+_ROLE$|^LIMIT_BASE_AMOUNT$/.test(key) && !isFinite(Number(v))) throw new Error(key + ' 값은 숫자여야 합니다: ' + v);
+    var before = JSON.parse(JSON.stringify(row));
+    row.value = v; row.is_assumed = !!isAssumed; row.note = note === undefined ? row.note : String(note);
+    row.updated_at = nowStr_(); row.updated_by = user.user_id; row.row_version = Number(row.row_version) + 1;
+    writeObject_('DB_MASTER', 'M_SETTING', row);
+    audit_(user, 'UPDATE', 'DB_MASTER', 'M_SETTING', key, before, row, reason);
+    return stripInternal_(row);
+  });
+}
