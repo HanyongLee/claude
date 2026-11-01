@@ -12,7 +12,7 @@ const { createGas } = require('./gas_mock');
 const GAS = path.join(__dirname, '..', 'gas');
 const OUT = process.argv[2] || '.';
 const ORDER = ['Config.gs', 'Logic.gs', 'Db.gs', 'Audit.gs', 'Auth.gs', 'Setup.gs', 'Pipeline.gs', 'Backup.gs',
-  'Master.gs', 'Metrics.gs', 'Signals.gs', 'Work.gs', 'Docs.gs', 'Api.gs', 'VirtualData.gs', 'TestData.gs', 'Main.gs'];
+  'Master.gs', 'Metrics.gs', 'Signals.gs', 'Work.gs', 'Docs.gs', 'Performance.gs', 'Backtest.gs', 'Api.gs', 'VirtualData.gs', 'TestData.gs', 'Main.gs'];
 const OWNER = 'owner@example.invalid';
 
 (async () => {
@@ -20,7 +20,9 @@ const OWNER = 'owner@example.invalid';
   // 검증 기준 '오늘'을 2026-10-28 09:00(KST)로 고정한다(가상 자료 종료일 2026-10-27 의 다음 날)
   const FROZEN = new Date('2026-10-28T09:00:00+09:00').getTime();
   let tick = 0;
-  class FrozenDate extends Date { constructor(...a) { if (!a.length) super(FROZEN + (tick++) * 1000); else super(...a); } static now() { return FROZEN; } }
+  const REAL0 = Date.now();
+// '오늘'은 고정하되 경과 시간은 실제로 흐르게 한다(실행시간 예산 검사용)
+class FrozenDate extends Date { constructor(...a) { if (!a.length) super(FROZEN + (tick++) * 1000); else super(...a); } static now() { return FROZEN + (Date.now() - REAL0); } }
   const ctx = vm.createContext(Object.assign({ Date: FrozenDate }, gas.globals));
   vm.runInContext(ORDER.map(f => fs.readFileSync(path.join(GAS, f), 'utf8')).join('\n;\n'), ctx);
   vm.runInContext(`setupSystem(); loadVirtualData_({ startDate: '2024-10-01', endDate: '2026-10-27', seed: 20261027 }); runPipeline_('UI');`, ctx);
@@ -63,12 +65,13 @@ const OWNER = 'owner@example.invalid';
       await page.goto('http://app.local/');
       const shots = who.tag === 'admin'
         ? [['home', ''], ['ws360', '#/ws/W0123'], ['import', '#/import'], ['master', '#/master/W0123'], ['ws360-past', '#/ws/W0123/2026-02-15'],
-           ['credit', '#/credit'], ['case', '#/case/' + caseId], ['rules', '#/rules'], ['docs', '#/docs']]
+           ['credit', '#/credit'], ['case', '#/case/' + caseId], ['rules', '#/rules'], ['docs', '#/docs'], ['perf', '#/perf'], ['perf-detail', '#/perf/W0123']]
         : [['home', ''], ['ws360', '#/ws/W0101'], ['trend', '#/trend'], ['case', '#/case/' + caseId]];
       for (const [name, hash] of shots) {
-        if (scheme === 'dark' && name !== 'ws360' && name !== 'case') continue;
+        if (scheme === 'dark' && name !== 'ws360' && name !== 'case' && name !== 'perf') continue;
         await page.evaluate(h => { location.hash = h; }, hash);
         await page.waitForTimeout(600);
+        if (name === 'perf') { await page.click('#pTabs button[data-t="matrix"]'); await page.waitForTimeout(800); await page.screenshot({ path: path.join(OUT, `${who.tag}-matrix-${scheme}.png`), fullPage: true }); await page.click('#pTabs button[data-t="collect"]'); await page.waitForTimeout(500); }
         await page.screenshot({ path: path.join(OUT, `${who.tag}-${name}-${scheme}.png`), fullPage: true });
         const bad = await page.evaluate(() => Array.from(document.querySelectorAll('.note.bad')).map(n => n.textContent).join(' | '));
         if (/접속할 수 없습니다|is not|undefined/.test(bad)) errors.push(who.tag + ' ' + name + ': ' + bad);

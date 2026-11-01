@@ -75,12 +75,12 @@ function bindRows(id, rows, fn) {
 function renderNav() {
   var items = [['home', '통합 홈', 'home.view'], ['trend', '동향관리', 'work.view'], ['credit', '채권관리', 'work.view'],
     ['ws', '중도매인 조회', 'ws.view'], ['master', '기초자료', 'master.edit'], ['approvals', '승인 대기', 'master.edit'],
-    ['rules', '지표·신호 기준', 'work.view'], ['docs', '매뉴얼·서식', 'work.view'], ['import', '가져오기·오류 점검', 'import.view'],
+    ['perf', '실적관리', 'ws.view'], ['rules', '지표·신호 기준', 'work.view'], ['docs', '매뉴얼·서식', 'work.view'], ['import', '가져오기·오류 점검', 'import.view'],
     ['users', '사용자·권한', 'user.manage'], ['audit', '변경·처리 이력', 'audit.view']];
   var cur = (location.hash.replace('#/', '').split('/')[0]) || 'home';
   document.getElementById('nav').innerHTML = items.filter(function (i) { return can(i[2]); }).map(function (i) {
     return '<a href="#/' + i[0] + '" class="' + (cur === i[0] ? 'on' : '') + '">' + i[1] + '</a>';
-  }).join('') + '<span class="muted" style="align-self:center;font-size:12px">실적관리: 3단계</span>';
+  }).join('');
 }
 function renderStatus(st, meta) {
   st = st || {};
@@ -104,7 +104,7 @@ function route() {
   var fn = { home: pageHome, ws: p[1] ? function () { page360(decodeURIComponent(p[1]), p[2]); } : pageSearch,
     master: p[1] ? function () { pageMasterDetail(decodeURIComponent(p[1])); } : pageMasterList,
     approvals: pageApprovals, import: pageImport, users: pageUsers, audit: pageAudit,
-    trend: pageTrend, credit: pageCredit, rules: pageRules, docs: pageDocs,
+    trend: pageTrend, credit: pageCredit, rules: pageRules, docs: pageDocs, perf: function () { pagePerf(p[1] ? decodeURIComponent(p[1]) : ''); },
     'case': function () { pageCase(decodeURIComponent(p[1] || '')); } }[page] || pageHome;
   renderStatus(S.boot.status);
   fn();
@@ -742,7 +742,9 @@ function pageRules() {
     var html = '<h1>지표·신호 기준 관리</h1><div class="note">값은 드라이브의 기준 시트(M_SETTING)에만 저장됩니다. <b>가정값</b>은 내부 기준 확인 전 임시값입니다. 변경 전후는 이력에 남고, 각 신호에는 판정 시점의 기준값이 함께 저장됩니다.</div>';
     html += table([{ t: '키', k: 'key' }, { t: '설명', k: 'label', wrap: true }, { t: '값', f: function (r) { return '<b>' + h(r.value) + '</b> ' + h(r.unit); } }, { t: '구분', f: function (r) { return r.is_assumed ? '<span class="badge b-warn">가정값</span>' : '<span class="badge b-ok">확정</span>'; } }, { t: '비고', k: 'note', wrap: true },
       { t: '', f: function (r) { return d.canEdit ? '<button data-k="' + h(r.key) + '">변경</button>' : ''; } }], d.settings, { id: 'stTbl' });
-    if (d.canEdit) html += '<div class="card" style="margin-top:12px"><h2>시뮬레이션 (저장 안 함)</h2><div class="row"><input id="simKey" placeholder="키 (예: S01_DROP_PCT)"><input id="simVal" placeholder="값"><button id="simGo">최신 기준일 신호 건수 보기</button></div><div id="simOut"></div><div class="note">과거 기준일 백테스트와 그림자 운영 집계는 3단계에서 제공합니다.</div></div>';
+    if (d.canEdit) html += '<div class="row"><button id="blBtn">매트릭스 세로축 기준선 재산정(전년 연간 중앙값)</button></div>';
+    html += '<div class="card" style="margin-top:12px" id="btCard"><h2>백테스트·그림자 운영</h2><p class="muted">불러오는 중…</p></div>';
+    if (d.canEdit) html += '<div class="card" style="margin-top:12px"><h2>시뮬레이션 (저장 안 함)</h2><div class="row"><input id="simKey" placeholder="키 (예: S01_DROP_PCT)"><input id="simVal" placeholder="값"><button id="simGo">최신 기준일 신호 건수 보기</button></div><div id="simOut"></div><div class="note">저장하지 않고 최신 기준일만 계산합니다. 과거 기준일 전체는 위 백테스트를 사용하세요.</div></div>';
     view(html);
     var byKey = {}; d.settings.forEach(function (s) { byKey[s.key] = s; });
     document.getElementById('view').onclick = function (e) {
@@ -753,6 +755,8 @@ function pageRules() {
       var reason = prompt('변경 사유(근거 문서·조항)'); if (!reason) return;
       call('api_updateSetting', k, v, !confirmed, confirmed ? reason : cur.note, reason).then(function () { toast('변경했습니다. 다음 정기 처리부터 적용됩니다.'); pageRules(); }).catch(function (err) { toast(err.message, true); });
     };
+    renderBacktest(d.canEdit);
+    var bl = document.getElementById('blBtn'); if (bl) bl.onclick = function () { bl.disabled = true; call('api_computeMatrixBaseline').then(function (r) { toast('기준선 ' + r.value + '회 저장'); pageRules(); }).catch(function (e) { bl.disabled = false; toast(e.message, true); }); };
     var sg = document.getElementById('simGo');
     if (sg) sg.onclick = function () {
       var o = {}; var k = document.getElementById('simKey').value.trim(); if (k) o[k] = document.getElementById('simVal').value.trim();
@@ -787,6 +791,150 @@ function pageDocs() {
     bind('df', 'api_registerDoc'); bind('vf', 'api_registerDocVersion'); bind('sf', 'api_registerSituation');
     bind('pf', 'api_registerProcedure', function (o) { o.form_doc_ids = String(o.forms || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean); delete o.forms; });
   }).catch(fail);
+}
+
+/* ───── 백테스트·그림자 운영 ───── */
+function renderBacktest(canEdit) {
+  call('api_backtestStatus').then(function (b) {
+    var el = document.getElementById('btCard'); if (!el) return;
+    var sh = b.shadow;
+    var html = '<h2>백테스트·그림자 운영</h2>';
+    html += '<h3>그림자 운영 집계 (최근 ' + sh.weeks + '주, ' + h(sh.from) + '~' + h(sh.to) + ')</h3><div class="tiles">' + tile('전체 신호', sh.total_signals, '건') +
+      tile('불필요한 경보 비율', sh.false_alarm_rate === null ? '—' : (sh.false_alarm_rate * 100).toFixed(0), '%', '오탐 ' + sh.false_alarm + ' + 일시적 변화 ' + sh.temporary_change_cases) + '</div>' +
+      table([{ t: '경매사', k: 'auctioneer' }, { t: '주당 경보', num: true, k: 'per_week' }, { t: '합계', num: true, k: 'total' }], sh.per_auctioneer_week, { empty: '신호 없음' }) +
+      table([{ t: '규칙', f: function (r) { return h(r.rule_id + ' ' + r.label); } }, { t: '전체', num: true, k: 'total' }, { t: '활성', num: true, k: 'active' }, { t: '해소', num: true, k: 'resolved' }, { t: '오탐 확정', num: true, k: 'false_alarm' }], sh.by_rule, { empty: '' }) + '<div class="note">' + h(sh.note) + '</div>';
+    html += '<h3>정답 표본 (과거 실제 사안 — 익명 코드·시점만)</h3>' + table([{ t: '중도매인', k: 'wholesaler_id' }, { t: '발생일', k: 'event_date' }, { t: '유형', k: 'event_type' }, { t: '비고', k: 'note', wrap: true },
+      { t: '', f: function (r) { return canEdit ? '<button class="danger" data-tdel="' + h(r.truth_id) + '">삭제</button>' : ''; } }], b.truth, { empty: '표본 없음 — 표본이 없으면 포착률·적중률을 계산할 수 없습니다(경보량만 산출)' });
+    if (canEdit) html += '<form class="row" id="tf2"><input name="wholesaler_id" placeholder="중도매인코드" required><input type="date" name="event_date" required><input name="event_type" placeholder="사안 유형" required><input name="note" placeholder="비고(개인정보·금액 금지)"><button class="primary">표본 추가</button></form>';
+    html += '<h3>백테스트 실행 기록</h3>' + (b.current ? '<div class="note warn">진행 중: ' + h(b.current) + ' <button id="btCont">이어서 실행</button></div>' : '') +
+      (canEdit && !b.current ? '<form class="row" id="btf"><label class="muted">시작일 <input type="date" name="dateFrom"></label><label class="muted">표본 간격(경매일) <input name="sampleDays" value="5" style="width:60px"></label><label class="muted">임시 기준값(JSON) <input name="overrides" placeholder=\'{"S01_DROP_PCT":"40"}\' style="width:220px"></label><button class="primary">백테스트 시작</button></form>' : '');
+    html += table([{ t: '실행', k: 'run_id' }, { t: '상태', f: function (r) { return badge(r.status) + (r.message ? ' <span class="muted">' + h(r.message) + '</span>' : ''); } }, { t: '기간', f: function (r) { return h(r.date_from) + '~' + h(r.date_to) + ' (' + h(r.sample_days) + '경매일마다, ' + h(r.dates_done) + '/' + h(r.dates_total) + ')'; } },
+      { t: '임시 기준', wrap: true, f: function (r) { return h(JSON.stringify((r.params || {}).overrides || {})); } },
+      { t: '결과', wrap: true, f: function (r) { var s = r.summary; if (!s) return '—'; return '표본 ' + s.truth_count + ' · 포착률 ' + (s.capture_rate === null ? '—' : (s.capture_rate * 100).toFixed(0) + '%') + ' · 적중률 ' + (s.precision === null ? '—' : (s.precision * 100).toFixed(0) + '%') + ' · 선행 중앙값 ' + (s.lead_days_median === null ? '—' : s.lead_days_median + '일') + ' · 경보 ' + s.alerts + '건(주당 ' + s.alerts_per_week.toFixed(1) + ')' + (s.caveat ? '<br><span class="badge b-warn">표본 부족</span> <span class="muted">' + h(s.caveat) + '</span>' : '') + '<br><span class="muted">경매사별 주당: ' + s.alerts_per_auctioneer_week.map(function (x) { return h(x.auctioneer) + ' ' + x.per_week; }).join(', ') + '</span>'; } }], b.runs, { empty: '실행 기록 없음' });
+    html += '<div class="note">측정: 포착률(사안 전 ' + '기준일수 이내 신호) · 적중률(신호 후 기준일수 이내 사안) · 선행기간 · 경매사 1인당 주간 경보량. 운영 전 4~8주(가정) 그림자 운영으로 오탐 비율을 확인한 뒤 기준값을 확정하세요.</div>';
+    el.innerHTML = html;
+    var err = function (e) { toast(e.message, true); };
+    var tf2 = document.getElementById('tf2'); if (tf2) tf2.onsubmit = function (e) { e.preventDefault(); var r = prompt('등록 사유'); if (!r) return; call('api_saveTruth', formData(tf2), r).then(function () { toast('추가'); renderBacktest(canEdit); }).catch(err); };
+    var btf = document.getElementById('btf'); if (btf) btf.onsubmit = function (e) { e.preventDefault(); var o = formData(btf); try { o.overrides = o.overrides ? JSON.parse(o.overrides) : {}; } catch (x) { return toast('임시 기준값 JSON 형식 오류', true); } toast('실행 중… 시간이 걸리면 트리거로 이어서 처리됩니다'); call('api_startBacktest', o).then(function () { renderBacktest(canEdit); }).catch(err); };
+    var bc = document.getElementById('btCont'); if (bc) bc.onclick = function () { call('api_continueBacktest').then(function () { renderBacktest(canEdit); }).catch(err); };
+    el.onclick = function (e) { var b2 = e.target.closest('button[data-tdel]'); if (!b2) return; var r = prompt('삭제 사유'); if (!r) return; call('api_deleteTruth', b2.getAttribute('data-tdel'), r).then(function () { renderBacktest(canEdit); }).catch(err); };
+  }).catch(function (e) { var el = document.getElementById('btCard'); if (el) el.innerHTML = '<div class="note bad">' + h(e.message) + '</div>'; });
+}
+
+/* ───── 실적관리 ───── */
+S.perfTab = S.perfTab || 'summary';
+function pagePerf(wsId) {
+  if (wsId) return pagePerfDetail(wsId);
+  loading();
+  call('api_performance').then(function (p) {
+    var m = p.meta;
+    renderStatus(S.boot.status, { baseDate: m.baseDate, period: m.period12, lastUpdated: m.lastUpdated, dataState: m.dataStatus });
+    var html = '<h1>실적관리</h1>' + (m.partialNote ? '<div class="note warn">' + h(m.partialNote) + '</div>' : '') +
+      '<div class="tabs" id="pTabs">' + [['summary', '요약'], ['trend', '추이'], ['collect', '회수'], ['compare', '비교'], ['matrix', '거래·회수 매트릭스']].map(function (t) { return '<button data-t="' + t[0] + '" class="' + (S.perfTab === t[0] ? 'on' : '') + '">' + t[1] + '</button>'; }).join('') +
+      '<span style="flex:1"></span><div class="tabs" id="pCats">' + ['전체', '과일', '채소'].map(function (c) { return '<button data-c="' + c + '" class="' + (S.cat === c ? 'on' : '') + '">' + c + '</button>'; }).join('') + '</div></div><div id="pBody"></div>';
+    view(html);
+    var draw = function () {
+      Array.prototype.forEach.call(document.getElementById('pTabs').querySelectorAll('button[data-t]'), function (b) { b.className = b.getAttribute('data-t') === S.perfTab ? 'on' : ''; });
+      Array.prototype.forEach.call(document.getElementById('pCats').children, function (b) { b.className = b.getAttribute('data-c') === S.cat ? 'on' : ''; });
+      var body = document.getElementById('pBody');
+      if (S.perfTab === 'matrix') { body.innerHTML = '<p class="muted">불러오는 중…</p>'; call('api_matrix', S.cat).then(function (mx) { body.innerHTML = matrixHtml(mx); bindRows('mxTbl', mx.points, function (r) { location.hash = '#/ws/' + encodeURIComponent(r.wholesaler_id); }); }).catch(function (e) { body.innerHTML = '<div class="note bad">' + h(e.message) + '</div>'; }); return; }
+      body.innerHTML = perfTabHtml(p, S.perfTab, S.cat);
+      bindRows('pTbl', p.rows, function (r) { location.hash = '#/perf/' + encodeURIComponent(r.wholesaler_id); });
+    };
+    document.getElementById('pTabs').onclick = function (e) { var t = e.target.getAttribute('data-t'); if (t) { S.perfTab = t; draw(); } };
+    document.getElementById('pCats').onclick = function (e) { var c = e.target.getAttribute('data-c'); if (c) { S.cat = c; draw(); } };
+    draw();
+  }).catch(fail);
+}
+function perfTabHtml(p, tab, cat) {
+  var m = p.meta, rows = p.rows.slice(), c = function (r) { return r.byCategory[cat]; };
+  var flag = function (r) { return (r.isNew ? ' <span class="badge b-info">신규</span>' : '') + (r.biz_status !== '정상' ? ' ' + badge(r.biz_status) : '') + (r.dataState !== '정상' ? ' ' + badge('판정보류') : ''); };
+  var nameCol = { t: '중도매인', f: function (r) { return h(r.wholesaler_id + ' ' + r.name) + flag(r); } };
+  var mk = p.marketGrowth[cat];
+  if (tab === 'summary') {
+    rows.sort(function (a, b) { return c(b).amount12 - c(a).amount12; });
+    var tot = p.market[cat];
+    return '<div class="tiles">' + tile(cat + ' 최근 12개월 구매', Math.round(tot.amount12 / 1e8 * 10) / 10, '억원', m.period12) + tile('전년 동기 누적 대비(부류 전체)', mk.status === '정상' ? ((mk.value > 0 ? '+' : '') + (mk.value * 100).toFixed(1)) : '—', '%', m.ytdPeriod) + tile('중도매인', rows.length, '명') + '</div>' +
+      table([nameCol, { t: '12개월 구매', num: true, f: function (r) { return won(c(r).amount12); } }, { t: '구매일수', num: true, f: function (r) { return num(c(r).days12); } },
+        { t: cat === '전체' ? '시장 구성비' : '중도매인 내 구성비', num: true, f: function (r) { var v = cat === '전체' ? c(r).shareOfMarket : c(r).shareInWs; return v === null ? '—' : (v * 100).toFixed(1) + '%'; } },
+        { t: m.lastCompleteYm + ' 구매', num: true, f: function (r) { return won(c(r).lastMonth.amount); } }, { t: '전년 동월 대비', num: true, f: function (r) { return pct(c(r).lastMonth.yoy); } },
+        { t: '전년 동기 누적 대비', num: true, f: function (r) { return pct(c(r).ytd.growth); } },
+        { t: m.currentYm + ' 진행(동일 경과일)', num: true, f: function (r) { return c(r).mtd ? won(c(r).mtd.amount) + ' <span class="muted">' + pct(c(r).mtd.growth) + '</span>' : '—'; } }], rows, { id: 'pTbl', onRow: true });
+  }
+  if (tab === 'trend') {
+    rows.sort(function (a, b) { return c(b).amount12 - c(a).amount12; });
+    return '<div class="note">중도매인을 선택하면 최근 24개월 월별 추이와 전년 대응 월 비교를 봅니다. 진행 중인 월은 동일 경과 경매일 기준입니다.</div>' +
+      table([nameCol, { t: '12개월 구매', num: true, f: function (r) { return won(c(r).amount12); } }, { t: '전년 동기 누적 대비', num: true, f: function (r) { return pct(c(r).ytd.growth); } }, { t: '', f: function () { return '<button>추이 보기</button>'; } }], rows, { id: 'pTbl', onRow: true });
+  }
+  if (tab === 'collect') {
+    rows.sort(function (a, b) { return (b.overdue || 0) - (a.overdue || 0) || (a.turnover || 99) - (b.turnover || 99); });
+    return '<div class="note">' + h(m.turnoverNote) + ' 지표 기준일 ' + h(m.metricBaseDate) + '.</div>' +
+      table([nameCol, { t: '미수 잔액', num: true, f: function (r) { return won(r.balance); } }, { t: '회전율(3개월)', num: true, f: function (r) { return r.turnover === null ? '<span class="muted" title="' + h(r.turnoverInfo.reason) + '">' + h(r.turnoverInfo.status) + '</span>' : r.turnover.toFixed(2) + '회'; } },
+        { t: '회수일수', num: true, f: function (r) { return r.collectionDays === null ? '—' : r.collectionDays.toFixed(1) + '일'; } }, { t: '연체금액', num: true, f: function (r) { return won(r.overdue); } }, { t: '연체일수', num: true, f: function (r) { return num(r.overdueDays); } },
+        { t: '한도 사용률', num: true, f: function (r) { return r.limitUsage === null ? '<span class="muted" title="' + h(r.limitUsageInfo.reason) + '">산출불가</span>' : (r.limitUsage * 100).toFixed(1) + '%'; } }], rows, { id: 'pTbl', onRow: true });
+  }
+  // compare
+  rows.sort(function (a, b) { return c(b).amount12 - c(a).amount12; });
+  var csv = [['코드', '상호', '12개월구매', '구매일수', '전년동월대비', '전년동기누적대비', '회전율', '회수일수', '미수잔액', '연체금액']].concat(rows.map(function (r) {
+    var g1 = c(r).lastMonth.yoy, g2 = c(r).ytd.growth;
+    return [r.wholesaler_id, r.name, c(r).amount12, c(r).days12, g1.status === '정상' ? (g1.value * 100).toFixed(1) : g1.status, g2.status === '정상' ? (g2.value * 100).toFixed(1) : g2.status, r.turnover === null ? '' : r.turnover.toFixed(2), r.collectionDays === null ? '' : r.collectionDays.toFixed(1), r.balance === null ? '' : r.balance, r.overdue === null ? '' : r.overdue];
+  })).map(function (row) { return row.map(function (v) { return /[",\n]/.test(String(v)) ? '"' + String(v).replace(/"/g, '""') + '"' : v; }).join(','); }).join('\n');
+  S._csv = csv;
+  return '<div class="row"><button id="csvBtn">비교표 다운로드(CSV)</button><span class="muted">기준일 ' + h(m.baseDate) + ' · ' + h(cat) + ' · 다운로드는 접근 기록 대상이 아닌 화면 자료입니다</span></div>' +
+    table([{ t: '순위', num: true, f: function (r, i) { return ''; } }, nameCol, { t: '12개월 구매', num: true, f: function (r) { return won(c(r).amount12); } }, { t: '전년 동월', num: true, f: function (r) { return pct(c(r).lastMonth.yoy); } }, { t: '전년 누적', num: true, f: function (r) { return pct(c(r).ytd.growth); } },
+      { t: '회전율', num: true, f: function (r) { return r.turnover === null ? '—' : r.turnover.toFixed(2); } }, { t: '회수일수', num: true, f: function (r) { return r.collectionDays === null ? '—' : r.collectionDays.toFixed(1); } }, { t: '미수 잔액', num: true, f: function (r) { return won(r.balance); } }, { t: '연체', num: true, f: function (r) { return won(r.overdue); } }], rows, { id: 'pTbl', onRow: true }) +
+    '<script>document.getElementById("csvBtn").onclick=function(){downloadText("실적비교_' + h(m.baseDate) + '_' + h(cat) + '.csv","\uFEFF"+S._csv);};</' + 'script>';
+}
+function pagePerfDetail(wsId) {
+  loading();
+  call('api_performanceDetail', wsId).then(function (d) {
+    var w = d.wholesaler;
+    var html = '<div class="row" style="justify-content:space-between"><h1>' + h(w.wholesaler_id + ' ' + w.name) + ' — 월별 실적</h1><div class="row"><a href="#/perf">← 실적관리</a> <a href="#/ws/' + encodeURIComponent(wsId) + '">통합 상세</a></div></div>';
+    html += '<div class="card"><h2>최근 24개월 구매금액과 전년 대응 월</h2>' + trendBlock(d.trend) + '</div>';
+    html += '<div class="card" style="margin-top:12px"><h2>회전율 추이(전체 기준, 저장된 기준일 스냅샷)</h2>' + table([{ t: '기준일', k: 'base_date' }, { t: '회전율', num: true, f: function (r) { return r.value.toFixed(2) + '회'; } }, { t: '집계기간', k: 'period' }], d.turnoverHistory, { empty: '스냅샷 없음' }) + '</div>';
+    view(html);
+    // 24개월 표: trendBlock 은 12개월 가정 → 전체 사용
+    bindTrend(d.trend);
+  }).catch(fail);
+}
+
+/* 매트릭스: x 로그 눈금(구매금액), y 회전율, 색 = 전년 동기 누적 증감(감소 주황, 증가 청록, 비교불가 회색), 크기 = 미수금 */
+function matrixHtml(mx) {
+  var W = 760, H = 460, L = 60, R = 20, T = 20, B = 44;
+  var pts = mx.points;
+  var html = '<div class="note">' + h(mx.disclaimer) + '</div>';
+  html += '<div class="legend"><span>가로축: ' + h(mx.axes.x) + '</span><span>세로축: ' + h(mx.axes.y) + '</span></div><div class="legend"><span>색: ' + h(mx.axes.color) + ' — <i style="background:#1baf7a"></i>증가 <i style="background:#eb6834"></i>감소 <i style="background:#9a9a94"></i>비교불가</span><span>크기: ' + h(mx.axes.size) + '</span></div>';
+  if (!pts.length) return html + '<p class="muted">표시할 점 없음</p>';
+  var xs = pts.map(function (p) { return Math.max(p.x, 1); }), ys = pts.map(function (p) { return p.y; });
+  var lx0 = Math.log10(Math.min.apply(null, xs)) - 0.1, lx1 = Math.log10(Math.max.apply(null, xs)) + 0.1;
+  var y0 = 0, y1 = Math.max.apply(null, ys.concat([mx.boundaries.y])) * 1.15;
+  var X = function (v) { return L + (Math.log10(Math.max(v, 1)) - lx0) / (lx1 - lx0) * (W - L - R); }, Y = function (v) { return T + (1 - (v - y0) / (y1 - y0)) * (H - T - B); };
+  var smax = Math.max.apply(null, pts.map(function (p) { return p.size; }).concat([1]));
+  var svg = '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="거래·회수 매트릭스">';
+  // 사분면 배경 라벨
+  var bx = X(mx.boundaries.x), by = Y(mx.boundaries.y);
+  svg += '<line x1="' + bx + '" x2="' + bx + '" y1="' + T + '" y2="' + (H - B) + '" stroke="var(--text-2)" stroke-dasharray="4 4"/><line x1="' + L + '" x2="' + (W - R) + '" y1="' + by + '" y2="' + by + '" stroke="var(--text-2)" stroke-dasharray="4 4"/>';
+  var lab = function (x, y, t, anchor) { return '<text class="axis" x="' + x + '" y="' + y + '" text-anchor="' + anchor + '" font-weight="600">' + h(t) + '</text>'; };
+  svg += lab(W - R - 4, T + 14, mx.quadrants.HH.label + ' ' + mx.counts.HH, 'end') + lab(W - R - 4, H - B - 6, mx.quadrants.HL.label + ' ' + mx.counts.HL, 'end') + lab(L + 4, T + 14, mx.quadrants.LH.label + ' ' + mx.counts.LH, 'start') + lab(L + 4, H - B - 6, mx.quadrants.LL.label + ' ' + mx.counts.LL, 'start');
+  // 축 눈금
+  for (var e = Math.ceil(lx0); e <= Math.floor(lx1); e++) { var xv = Math.pow(10, e); svg += '<text class="axis" x="' + X(xv) + '" y="' + (H - B + 16) + '" text-anchor="middle">' + (xv / 1e8 >= 1 ? (xv / 1e8) + '억' : (xv / 1e4) + '만') + '</text>'; }
+  for (var k = 0; k <= 4; k++) { var yv = y0 + (y1 - y0) * k / 4; svg += '<g class="grid"><line x1="' + L + '" x2="' + (W - R) + '" y1="' + Y(yv) + '" y2="' + Y(yv) + '"/></g><text class="axis" x="' + (L - 6) + '" y="' + (Y(yv) + 4) + '" text-anchor="end">' + yv.toFixed(1) + '회</text>'; }
+  svg += '<text class="axis" x="' + (W / 2) + '" y="' + (H - 6) + '" text-anchor="middle">최근 12개월 구매금액(로그 눈금) · 경계 ' + Math.round(mx.boundaries.x / 1e4).toLocaleString() + '만원(' + h(mx.boundaries.xSource) + ')</text>';
+  svg += '<text class="axis" transform="translate(14,' + (H / 2) + ') rotate(-90)" text-anchor="middle">회전율(전체) · 경계 ' + mx.boundaries.y.toFixed(2) + '회(' + h(mx.boundaries.ySource) + ')</text>';
+  pts.forEach(function (p) {
+    var r = 5 + 14 * Math.sqrt(p.size / smax);
+    var col = p.growth.status !== '정상' ? '#9a9a94' : (p.growth.value < 0 ? '#eb6834' : '#1baf7a');
+    svg += '<circle cx="' + X(p.x) + '" cy="' + Y(p.y) + '" r="' + r + '" fill="' + col + '" fill-opacity="0.75" stroke="var(--surface)" stroke-width="2"><title>' + h(p.wholesaler_id + ' ' + p.name) + '\n' + h(p.quadrantLabel) + '\n구매 ' + won(p.x) + ' · 회전율 ' + p.y.toFixed(2) + '회 · 미수금 ' + won(p.size) + '\n전년 동기 누적 대비 ' + (p.growth.status === '정상' ? (p.growth.value * 100).toFixed(1) + '%' : p.growth.reason) + '</title></circle>';
+    svg += '<text class="axis" x="' + (X(p.x) + r + 2) + '" y="' + (Y(p.y) + 3) + '">' + h(p.wholesaler_id) + '</text>';
+  });
+  svg += '</svg>';
+  html += svg;
+  html += '<h3>분류 표</h3>' + table([{ t: '중도매인', f: function (p) { return h(p.wholesaler_id + ' ' + p.name); } }, { t: '분류', f: function (p) { return '<span class="badge ' + ({ HH: 'b-ok', HL: 'b-bad', LH: 'b-info', LL: 'b-warn' }[p.quadrant]) + '">' + h(p.quadrantLabel) + '</span>'; } },
+    { t: '12개월 구매', num: true, f: function (p) { return won(p.x); } }, { t: '회전율', num: true, f: function (p) { return p.y.toFixed(2); } }, { t: '회수일수', num: true, f: function (p) { return p.collectionDays === null ? '—' : p.collectionDays.toFixed(1); } },
+    { t: '미수금', num: true, f: function (p) { return won(p.size); } }, { t: '전년 누적 대비', num: true, f: function (p) { return pct(p.growth); } }], pts.slice().sort(function (a, b) { return a.quadrant === b.quadrant ? b.x - a.x : a.quadrant.localeCompare(b.quadrant); }), { id: 'mxTbl', onRow: true });
+  html += '<h3>그래프 밖 (분류 제외)</h3>' + table([{ t: '중도매인', f: function (p) { return h(p.wholesaler_id + ' ' + p.name); } }, { t: '사유', k: 'reason' }, { t: '12개월 구매', num: true, f: function (p) { return won(p.x); } }], mx.excluded, { empty: '없음' });
+  html += '<div class="note">경계선: 가로축은 부류 필터별 당기 중앙값, 세로축은 전년도 연간 중앙값 고정(지표·신호 기준 화면 "기준선 재산정") 또는 내부 목표값. 산정 시각 ' + h(mx.boundaries.computedAt) + '</div>';
+  return html;
 }
 
 /* ───── 시작 ───── */

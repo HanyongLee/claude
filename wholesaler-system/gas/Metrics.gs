@@ -162,10 +162,10 @@ function applicableLimit_(limits, mode) {
 
 /** 부류 전체(시장) 증감률: 모든 영업 중 중도매인의 당월 동일 경과일 합계 vs 전년 */
 function marketGrowth_(daily, calendar, wsIds, baseDate) {
-  var tot = {};
+  var tot = {}, byWs = indexDailyByWs_(daily);
   APP.CATEGORIES.concat([APP.ALL]).forEach(function (c) { tot[c] = { cur: 0, prev: 0 }; });
   wsIds.forEach(function (ws) {
-    var m = mtdCompare_(daily, calendar, ws, baseDate);
+    var m = mtdCompare_(byWs[ws] || [], calendar, ws, baseDate);
     APP.CATEGORIES.concat([APP.ALL]).forEach(function (c) { tot[c].cur += m.byCategory[c].amount; tot[c].prev += m.byCategory[c].prevAmount; });
   });
   var out = {};

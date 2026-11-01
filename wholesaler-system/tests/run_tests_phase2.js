@@ -8,11 +8,13 @@ const fs = require('fs'), path = require('path'), vm = require('vm');
 const { createGas } = require('./gas_mock');
 const GAS = path.join(__dirname, '..', 'gas');
 const ORDER = ['Config.gs', 'Logic.gs', 'Db.gs', 'Audit.gs', 'Auth.gs', 'Setup.gs', 'Pipeline.gs', 'Backup.gs',
-  'Master.gs', 'Metrics.gs', 'Signals.gs', 'Work.gs', 'Docs.gs', 'Api.gs', 'VirtualData.gs', 'TestData.gs', 'Main.gs'];
+  'Master.gs', 'Metrics.gs', 'Signals.gs', 'Work.gs', 'Docs.gs', 'Performance.gs', 'Backtest.gs', 'Api.gs', 'VirtualData.gs', 'TestData.gs', 'Main.gs'];
 const OWNER = 'owner@example.invalid', START = '2024-10-01', END = '2026-10-27';
 const FROZEN = new Date('2026-10-28T09:00:00+09:00').getTime();
 let tick = 0;
-class FrozenDate extends Date { constructor(...a) { if (!a.length) super(FROZEN + (tick++) * 1000); else super(...a); } static now() { return FROZEN; } }
+const REAL0 = Date.now();
+// '오늘'은 고정하되 경과 시간은 실제로 흐르게 한다(실행시간 예산 검사용)
+class FrozenDate extends Date { constructor(...a) { if (!a.length) super(FROZEN + (tick++) * 1000); else super(...a); } static now() { return FROZEN + (Date.now() - REAL0); } }
 
 let pass = 0, fail = 0; const out = [];
 const ok = (c, n, d) => { c ? pass++ : fail++; out.push((c ? '  [통과] ' : '  [실패] ') + n + (d ? ' — ' + d : '')); };
@@ -219,7 +221,7 @@ section('관리 건 묶음 규칙: 수동 개시·재발');
 section('기준값 관리');
 {
   const r = run(ctx, 'api_settings()').data;
-  ok(r.settings.length === 25 && r.settings.every(s => s.is_assumed === true || s.key === 'S01_DROP_PCT'), '기준값 25개 적재, 모두 "가정값" 표시', `${r.settings.length}개`);
+  ok(r.settings.length === 32 && r.settings.every(s => s.is_assumed === true || s.key === 'S01_DROP_PCT'), '기준값 32개 적재, 모두 "가정값" 표시', `${r.settings.length}개`);
   ok(!run(ctx, `api_updateSetting('LIMIT_COMBINE', '마음대로', false, '', 'x')`).ok, '허용되지 않은 결합 방식 값 거부');
   const upd = run(ctx, `api_updateSetting('LIMIT_COMBINE', '기본한도만', false, '(가상) 규정 제3조', '규정 확인')`);
   ok(upd.ok && upd.data.is_assumed === false, '결합 방식 확정 입력 → 가정 표시 해제');

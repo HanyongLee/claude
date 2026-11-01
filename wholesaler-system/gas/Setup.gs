@@ -126,7 +126,7 @@ function checkSecurity() {
 /** [편집기 실행] 정기 처리 트리거 설치. 시각은 [가정]: 06시 처리, 02시 백업 */
 function installTriggers() {
   requireOwner_();
-  var mine = ['triggerDailyPipeline', 'triggerDailyBackup', 'triggerContinuePipeline'];
+  var mine = ['triggerDailyPipeline', 'triggerDailyBackup', 'triggerContinuePipeline', 'triggerContinueBacktest'];
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (mine.indexOf(t.getHandlerFunction()) >= 0) ScriptApp.deleteTrigger(t);
   });

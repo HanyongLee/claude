@@ -461,7 +461,7 @@ function api_simulateSettings(overrides) {
       hits.forEach(function (h) { counts[h.rule_id] = (counts[h.rule_id] || 0) + 1; });
       if (hits.length) perWs.push({ wholesaler_id: w.wholesaler_id, name: w.name, rules: hits.map(function (h) { return h.rule_id; }).join(',') });
     });
-    return { base_date: base, counts: counts, wholesalersWithSignals: perWs, total: wholesalers.length, note: '저장되지 않은 시뮬레이션. 과거 기준일 백테스트는 3단계에서 제공' };
+    return { base_date: base, counts: counts, wholesalersWithSignals: perWs, total: wholesalers.length, note: '저장되지 않은 시뮬레이션(최신 기준일만). 과거 기준일 전체는 백테스트 사용' };
   });
 }
 
@@ -495,4 +495,46 @@ function api_wsWork(wsId) {
     var cases = readTable_('DB_WORK', 'T_CASE').filter(function (c) { return c.wholesaler_id === wsId && !c.is_deleted; }).map(stripInternal_);
     return { base_date: base, metrics: metrics, signals: signals, cases: cases, params: st.signal_params ? JSON.parse(st.signal_params) : {} };
   });
+}
+
+/* ───────────── 3단계: 실적관리 · 매트릭스 · 백테스트 ───────────── */
+
+function api_performance() {
+  return apiCall_('ws.view', function (user) { return performanceSummary_(user); });
+}
+function api_performanceDetail(wsId) {
+  return apiCall_('ws.view', function (user) { return performanceDetail_(user, String(wsId || '')); });
+}
+function api_matrix(category) {
+  return apiCall_('ws.view', function (user) { return matrix_(user, category); });
+}
+function api_computeMatrixBaseline() {
+  return apiCall_('settings.edit', function (user) { return computeMatrixBaseline_(user); });
+}
+
+function api_backtestStatus() {
+  return apiCall_('work.view', function () {
+    var runs = readTable_('DB_AGG', 'A_BACKTEST_RUN').map(function (r) {
+      var o = stripInternal_(r);
+      try { o.params = JSON.parse(r.params_json || '{}'); o.summary = r.summary_json ? JSON.parse(r.summary_json) : null; } catch (e) { o.summary = null; }
+      delete o.params_json; delete o.summary_json; return o;
+    }).reverse();
+    return { runs: runs, current: prop_(BT_STATE_KEY) || '', truth: readTable_('DB_MASTER', 'M_BACKTEST_TRUTH').filter(function (t) { return !t.is_deleted; }).map(stripInternal_), shadow: shadowStats_(8) };
+  });
+}
+function api_startBacktest(opts) {
+  return apiCall_('settings.edit', function (user) {
+    var run = startBacktest_(user, opts || {});
+    var r = continueBacktest_(Math.min(APP.JOB_TIME_BUDGET_MS, 150000), '웹앱:' + user.user_id);   // 웹 요청은 짧게, 나머지는 트리거
+    return { run: run, progress: r };
+  });
+}
+function api_continueBacktest() {
+  return apiCall_('settings.edit', function (user) { return continueBacktest_(Math.min(APP.JOB_TIME_BUDGET_MS, 150000), '웹앱:' + user.user_id); });
+}
+function api_saveTruth(o, reason) {
+  return apiCall_('settings.edit', function (user) { return saveTruth_(user, o || {}, reason); });
+}
+function api_deleteTruth(truthId, reason) {
+  return apiCall_('settings.edit', function (user) { return deleteTruth_(user, truthId, reason); });
 }

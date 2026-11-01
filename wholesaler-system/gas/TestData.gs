@@ -27,6 +27,12 @@ function loadVirtualData_(opt) {
     var inbox = folder_('INBOX');
     g.files.forEach(function (f) { inbox.createFile(f.name, f.content, MimeType.CSV); });
     loadVirtualDocs_(ownerAsUser_());
+    // 가상 정답 표본: W0123 은 2026-09-20 (가상) 결제 지연 사안, W0105 는 신호 없이 발생한 (가상) 사안(포착 실패 예시)
+    var a = newAuditFields_(ownerAsUser_());
+    appendObjects_('DB_MASTER', 'M_BACKTEST_TRUTH', [
+      Object.assign({ truth_id: 'BT-V1', wholesaler_id: 'W0123', event_date: '2026-09-20', event_type: '(가상) 결제 지연·채권 조치', note: '가상' }, a),
+      Object.assign({ truth_id: 'BT-V2', wholesaler_id: 'W0105', event_date: '2026-03-10', event_type: '(가상) 거래 분쟁', note: '가상' }, a)
+    ]);
     audit_(ownerAsUser_(), 'LOAD_VIRTUAL_DATA', 'DB_MASTER', '*', 'virtual', null, g.summary, '가상 데이터 적재');
     Logger.log(JSON.stringify(g.summary));
     return g.summary;
@@ -162,4 +168,15 @@ function loadVirtualDocs_(user) {
     { proc_step_id: 'PS-OVD-2', form_doc_id: 'FORM-COLLATERAL', required: false }
   ].map(function (d) { return Object.assign(d, a); }));
   void now;
+}
+
+/** [편집기 실행] 최근 12개월 백테스트를 현재 기준값으로 실행(완료까지 이어서) */
+function runBacktest() {
+  requireOwner_();
+  var owner = ownerAsUser_();
+  if (!prop_(BT_STATE_KEY)) startBacktest_(owner, {});
+  var r;
+  do { r = continueBacktest_(APP.JOB_TIME_BUDGET_MS, '수동'); } while (r.status === '진행');
+  Logger.log(JSON.stringify(r));
+  return r;
 }

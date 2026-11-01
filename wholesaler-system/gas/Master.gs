@@ -308,8 +308,11 @@ function uploadEvidence_(user, o) {
 var SETTING_CHOICES = {
   LIMIT_COMBINE: ['미확인', '기본한도만', '기본+추가', '전체합산'],
   CATEGORY_AR_SPLIT: ['불가', '가능'],
-  OVERDUE_DEFINITION: ['원천값']
+  OVERDUE_DEFINITION: ['원천값'],
+  MATRIX_X_MODE: ['당기중앙값'],
+  MATRIX_Y_MODE: ['당기중앙값', '전년고정', '목표값']
 };
+var SETTING_FREE_TEXT = ['LIMIT_BASE_AMOUNT', 'APPROVER_ROLE', 'MATRIX_Y_FIXED_SOURCE'];
 
 /** 기준값 변경: 값·가정 여부·비고. 변경 전후는 L_AUDIT 에 남고, 신호에는 판정 시점 값(params_json)이 저장된다. */
 function updateSetting_(user, key, value, isAssumed, note, reason) {
@@ -322,12 +325,40 @@ function updateSetting_(user, key, value, isAssumed, note, reason) {
     if (SETTING_CHOICES[key]) {
       if (key === 'CATEGORY_AR_SPLIT' ? !(v === '불가' || v.indexOf('가능') === 0) : SETTING_CHOICES[key].indexOf(v) < 0)
         throw new Error(key + ' 값은 ' + SETTING_CHOICES[key].join(' | ') + ' 중 하나입니다.');
-    } else if (!/^[A-Z_]+_ROLE$|^LIMIT_BASE_AMOUNT$/.test(key) && !isFinite(Number(v))) throw new Error(key + ' 값은 숫자여야 합니다: ' + v);
+    } else if (SETTING_FREE_TEXT.indexOf(key) < 0 && v !== '' && !isFinite(Number(v))) throw new Error(key + ' 값은 숫자여야 합니다: ' + v);
     var before = JSON.parse(JSON.stringify(row));
     row.value = v; row.is_assumed = !!isAssumed; row.note = note === undefined ? row.note : String(note);
     row.updated_at = nowStr_(); row.updated_by = user.user_id; row.row_version = Number(row.row_version) + 1;
     writeObject_('DB_MASTER', 'M_SETTING', row);
     audit_(user, 'UPDATE', 'DB_MASTER', 'M_SETTING', key, before, row, reason);
     return stripInternal_(row);
+  });
+}
+
+/* ───────────── 백테스트 정답 표본 ───────────── */
+
+function saveTruth_(user, o, reason) {
+  requireText_(reason, '변경 사유');
+  var ws = requireText_(o.wholesaler_id, '중도매인코드').toUpperCase();
+  if (!findWs_(ws)) throw new Error('중도매인을 찾을 수 없습니다: ' + ws);
+  var d = optDate_(requireText_(o.event_date, '사안 발생일'), '사안 발생일');
+  var row = { truth_id: uid_('BT'), wholesaler_id: ws, event_date: d, event_type: requireText_(o.event_type, '사안 유형'), note: o.note || '' };
+  Object.assign(row, newAuditFields_(user));
+  appendObjects_('DB_MASTER', 'M_BACKTEST_TRUTH', [row]);
+  audit_(user, 'CREATE', 'DB_MASTER', 'M_BACKTEST_TRUTH', row.truth_id, null, row, reason);
+  return stripInternal_(row);
+}
+
+function deleteTruth_(user, truthId, reason) {
+  requireText_(reason, '변경 사유');
+  return withLock_(function () {
+    invalidate_('DB_MASTER', 'M_BACKTEST_TRUTH');
+    var row = readTable_('DB_MASTER', 'M_BACKTEST_TRUTH').filter(function (r) { return r.truth_id === truthId && !r.is_deleted; })[0];
+    if (!row) throw new Error('표본을 찾을 수 없습니다.');
+    var before = JSON.parse(JSON.stringify(row));
+    row.is_deleted = true; row.updated_at = nowStr_(); row.updated_by = user.user_id; row.row_version = Number(row.row_version) + 1;
+    writeObject_('DB_MASTER', 'M_BACKTEST_TRUTH', row);
+    audit_(user, 'DELETE', 'DB_MASTER', 'M_BACKTEST_TRUTH', truthId, before, row, reason);
+    return true;
   });
 }

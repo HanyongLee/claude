@@ -45,7 +45,7 @@ function evaluateAll_(runId, trigger) {
   var wholesalers = readTable_('DB_MASTER', 'M_WHOLESALER').filter(function (w) { return !w.is_deleted; });
   var statusHist = readTable_('DB_MASTER', 'M_WS_STATUS_HIST');
   var limitsAll = readTable_('DB_MASTER', 'M_LIMIT');
-  var balIdx = balanceIndex_(daily);
+  var balIdx = balanceIndex_(daily), dailyByWs = indexDailyByWs_(daily);
   var activeIds = wholesalers.filter(function (w) { return statusOn_(statusHist, w.wholesaler_id, base) === '정상'; }).map(function (w) { return w.wholesaler_id; });
   var market = marketGrowth_(daily, calendar, activeIds, base);
 
@@ -53,7 +53,7 @@ function evaluateAll_(runId, trigger) {
   wholesalers.forEach(function (w) {
     var ws = w.wholesaler_id;
     var limits = asOfVersions_(limitsAll, 'limit_id', ws, base);
-    var m = computeMetrics_({ ws: ws, baseDate: base, daily: daily, monthly: monthly, calendar: calendar, limits: limits,
+    var m = computeMetrics_({ ws: ws, baseDate: base, daily: dailyByWs[ws] || [], monthly: monthly, calendar: calendar, limits: limits,
       balByDate: balIdx[ws] || {}, tradeStart: w.trade_start_date, settings: settings, marketGrowth: market });
     m.rows.forEach(function (r) { r.calc_run_id = runId; metricRows.push(r); });
     // 중도매인 단위 데이터 상태: 전체 정상 + 최근 30일 누락·불일치 없음

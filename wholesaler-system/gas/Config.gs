@@ -5,7 +5,7 @@
 
 var APP = {
   NAME: '중도매인 통합관리',
-  VERSION: '0.3.0-phase2',
+  VERSION: '0.4.0-phase3',
   TZ: 'Asia/Seoul',
   ROOT_FOLDER_NAME: '중도매인통합관리',
   OPEN_END: '9999-12-31',          // 종료일 미정 표시
@@ -85,7 +85,9 @@ var SCHEMA = {
     M_SITUATION: ['situation_code:text', 'label:text', 'condition_json:json', 'note:text'].concat(AUDIT_COLS),
     M_PROCEDURE: ['proc_step_id:text', 'situation_code:text', 'step_no:num', 'content:text', 'checks:text', 'doc_id:text',
       'doc_version:text', 'article:text', 'page:text'].concat(AUDIT_COLS),
-    M_PROC_FORM: ['proc_step_id:text', 'form_doc_id:text', 'required:bool'].concat(AUDIT_COLS)
+    M_PROC_FORM: ['proc_step_id:text', 'form_doc_id:text', 'required:bool'].concat(AUDIT_COLS),
+    // 백테스트 정답 표본: 과거 실제 사안(익명 코드·시점). 개인정보·금액은 넣지 않는다
+    M_BACKTEST_TRUTH: ['truth_id:text', 'wholesaler_id:text', 'event_date:date', 'event_type:text', 'note:text'].concat(AUDIT_COLS)
   },
   DB_PII: {
     P_GUARANTOR: ['guarantor_ref:text', 'name:text', 'relation:text', 'note:text'].concat(AUDIT_COLS)
@@ -122,7 +124,10 @@ var SCHEMA = {
     A_METRIC: ['metric_key:text', 'wholesaler_id:text', 'base_date:date', 'metric:text', 'category:text', 'value:num',
       'numerator:num', 'denominator:num', 'period_from:date', 'period_to:date', 'status:text', 'reason:text',
       'method:text', 'calc_run_id:text'],
-    A_STATUS: ['key:text', 'value:text', 'updated_at:datetime']
+    A_STATUS: ['key:text', 'value:text', 'updated_at:datetime'],
+    A_BACKTEST_RUN: ['run_id:text', 'status:text', 'params_json:json', 'date_from:date', 'date_to:date', 'sample_days:num',
+      'dates_total:num', 'dates_done:num', 'next_index:num', 'started_at:datetime', 'finished_at:datetime', 'summary_json:json', 'message:text'],
+    A_BACKTEST_HIT: ['run_id:text', 'base_date:date', 'wholesaler_id:text', 'rule_id:text', 'severity:text', 'evidence_json:json']
   },
   DB_WORK: {
     // 신호: 한 중도매인에서 한 규칙의 조건이 연속으로 충족된 한 구간
@@ -214,8 +219,23 @@ var SETTING_DEFAULTS = [
   ['LIMIT_BASE_AMOUNT', '미수잔액', '한도 산정 대상 채권: 미수잔액 | (내부 규정 확인 후 입력)', ''],
   ['OVERDUE_DEFINITION', '원천값', '연체 정의: 원천값(원천 제공 연체금액·일수 사용) | (내부 규정 확인 후 입력)', ''],
   ['CATEGORY_AR_SPLIT', '불가', '부류별 채권 배분: 불가 | 가능(배분 근거 문서 번호)', ''],
-  ['APPROVER_ROLE', 'ADMIN', '조치·종결 승인 역할(ADMIN | CREDIT_LEAD 등 사용자 역할)', '']
+  ['APPROVER_ROLE', 'ADMIN', '조치·종결 승인 역할(ADMIN | CREDIT_LEAD 등 사용자 역할)', ''],
+  ['MATRIX_X_MODE', '당기중앙값', '4분면 가로축(구매금액) 경계: 당기중앙값', ''],
+  ['MATRIX_Y_MODE', '전년고정', '4분면 세로축(회전율) 경계: 당기중앙값 | 전년고정(MATRIX_Y_FIXED) | 목표값(MATRIX_Y_FIXED)', ''],
+  ['MATRIX_Y_FIXED', '', '4분면 세로축 고정 경계값(회전율, 회). 비어 있으면 당기중앙값으로 대체. "기준선 재산정"으로 전년 연간 중앙값 채움', '회'],
+  ['MATRIX_Y_FIXED_SOURCE', '', '세로축 고정값 출처(자동 산정 일시 또는 내부 목표 근거)', ''],
+  ['BACKTEST_SAMPLE_DAYS', '5', '백테스트 표본 간격(경매일마다 → 5면 5경매일마다 판정)', '경매일'],
+  ['BACKTEST_LEAD_MAX_DAYS', '90', '백테스트: 사안 발생 전 최대 몇 일 이내 신호를 "사전 포착"으로 볼지', '일'],
+  ['BACKTEST_HORIZON_DAYS', '90', '백테스트: 신호 후 몇 일 이내 사안 발생을 "적중"으로 볼지', '일']
 ];
+
+var MATRIX_QUADRANTS = {
+  HH: { code: 'HH', label: '핵심 유지군', desc: '구매 높음·회전율 높음' },
+  HL: { code: 'HL', label: '집중 점검군', desc: '구매 높음·회전율 낮음' },
+  LH: { code: 'LH', label: '육성 검토군', desc: '구매 낮음·회전율 높음' },
+  LL: { code: 'LL', label: '개별 진단군', desc: '구매 낮음·회전율 낮음' }
+};
+var MATRIX_DISCLAIMER = '이 분류는 관리 우선순위를 찾기 위한 참고 자료이며, 신용등급이나 거래제한 기준이 아닙니다. 신호·조치 판단에 자동으로 연결되지 않습니다.';
 
 var SIGNAL_RULES = {
   S01: { label: '미수금 회전율 저하', family: '회수', severity: '주의' },
