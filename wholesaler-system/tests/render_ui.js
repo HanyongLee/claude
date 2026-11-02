@@ -12,7 +12,7 @@ const { createGas } = require('./gas_mock');
 const GAS = path.join(__dirname, '..', 'gas');
 const OUT = process.argv[2] || '.';
 const ORDER = ['Config.gs', 'Logic.gs', 'Db.gs', 'Audit.gs', 'Auth.gs', 'Setup.gs', 'Pipeline.gs', 'Backup.gs',
-  'Master.gs', 'Metrics.gs', 'Signals.gs', 'Work.gs', 'Docs.gs', 'Performance.gs', 'Backtest.gs', 'Qa.gs', 'Notify.gs', 'Api.gs', 'VirtualData.gs', 'TestData.gs', 'Main.gs'];
+  'Master.gs', 'Metrics.gs', 'Signals.gs', 'Work.gs', 'Docs.gs', 'Performance.gs', 'Backtest.gs', 'Qa.gs', 'Notify.gs', 'Api.gs', 'VirtualData.gs', 'TestData.gs', 'Main.gs', 'Install.gs'];
 const OWNER = 'owner@example.invalid';
 
 (async () => {
@@ -22,7 +22,7 @@ const OWNER = 'owner@example.invalid';
   let tick = 0;
   const REAL0 = Date.now();
 // '오늘'은 고정하되 경과 시간은 실제로 흐르게 한다(실행시간 예산 검사용)
-class FrozenDate extends Date { constructor(...a) { if (!a.length) super(FROZEN + (tick++) * 1000); else super(...a); } static now() { return FROZEN + (Date.now() - REAL0); } }
+class FrozenDate extends Date { constructor(...a) { if (!a.length) super(FROZEN + (Date.now() - REAL0)); else super(...a); } static now() { return FROZEN + (Date.now() - REAL0); } }
   const ctx = vm.createContext(Object.assign({ Date: FrozenDate }, gas.globals));
   vm.runInContext(ORDER.map(f => fs.readFileSync(path.join(GAS, f), 'utf8')).join('\n;\n'), ctx);
   vm.runInContext(`setupSystem(); loadVirtualData_({ startDate: '2024-10-01', endDate: '2026-10-27', seed: 20261027 }); runPipeline_('UI');`, ctx);
@@ -88,6 +88,25 @@ class FrozenDate extends Date { constructor(...a) { if (!a.length) super(FROZEN 
       }
       await page.close();
     }
+  }
+  // 접속코드 모드: 식별 불가 사용자로 열면 로그인 화면 → 로그인 후 홈
+  vm.runInContext(`_tableMemo = {}; api_updateSetting('AUTH_MODE', 'code', false, '', 'UI'); var __c = api_issueAccessCode('auctioneer1@example.invalid', 'UI').data.code; __code = __c;`, ctx);
+  {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    page.on('pageerror', e => errors.push('login ' + e.message));
+    await page.exposeFunction('__api', (fn, args) => { gas.state.activeEmail = ''; vm.runInContext('_tableMemo = {}; _ssMemo = {};', ctx); ctx.__args = args; try { return vm.runInContext(fn + '.apply(null, __args)', ctx); } finally { gas.state.activeEmail = OWNER; } });
+    await page.addInitScript(() => { const make = (ok, ko) => new Proxy({}, { get: (t, k) => { if (k === 'withSuccessHandler') return (f) => make(f, ko); if (k === 'withFailureHandler') return (f) => make(ok, f); return (...a) => window.__api(k, a).then(ok, ko); } }); window.google = { script: { run: make(() => {}, () => {}) } }; });
+    await page.route('http://app.local/**', r => r.fulfill({ contentType: 'text/html; charset=utf-8', body: html }));
+    await page.goto('http://app.local/'); await page.waitForTimeout(500);
+    await page.screenshot({ path: path.join(OUT, 'code-login.png'), fullPage: true });
+    const hasLogin = await page.$('#lf');
+    if (!hasLogin) errors.push('접속코드 모드인데 로그인 화면이 없음');
+    await page.fill('#lf input[name=email]', 'auctioneer1@example.invalid'); await page.fill('#lf input[name=code]', vm.runInContext('__code', ctx)); await page.click('#lf button');
+    await page.waitForTimeout(800);
+    await page.screenshot({ path: path.join(OUT, 'code-home.png'), fullPage: true });
+    const who = await page.evaluate(() => document.querySelector('.who').textContent);
+    if (who.indexOf('경매사1') < 0) errors.push('접속코드 로그인 후 사용자 표시 실패: ' + who);
+    await page.close();
   }
   await browser.close();
   console.log(errors.length ? '오류:\n' + errors.join('\n') : '스크립트 오류 없음');

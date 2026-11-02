@@ -148,3 +148,30 @@ function seedSettings_(user) {
   appendObjects_('DB_MASTER', 'M_SETTING', rows);
   return rows.length;
 }
+
+/**
+ * [편집기 실행] 한 번에 설정: 폴더·시트 생성 → (비어 있으면) 가상 데이터 → 정기 처리 → 트리거 설치 → 보안 점검
+ * 실자료 운영 시에는 setupAllWithoutVirtualData 를 쓴다.
+ */
+function setupAll() { return setupAll_(true); }
+function setupAllWithoutVirtualData() { return setupAll_(false); }
+
+function setupAll_(withVirtual) {
+  requireOwner_();
+  var out = [];
+  out.push('[1/5] 설정: ' + setupSystem().slice(-1)[0]);
+  invalidate_('DB_MASTER', 'M_WHOLESALER');
+  if (withVirtual && !readTable_('DB_MASTER', 'M_WHOLESALER').length) {
+    var end = addDays_(todayStr_(), -1), start = addMonths_(ymOf_(end), -24) + '-01';
+    out.push('[2/5] 가상 데이터: ' + JSON.stringify(loadVirtualData_({ startDate: start, endDate: end, seed: 20261027 })));
+  } else out.push('[2/5] 가상 데이터: 건너뜀(' + (withVirtual ? '기초자료가 이미 있음' : '실자료 모드') + ')');
+  var r = runPipeline_('setupAll'), n = 0;
+  while (r.status === '계속' && n++ < 30) { Utilities.sleep(2000); r = runPipeline_('setupAll'); }
+  out.push('[3/5] 정기 처리: ' + JSON.stringify(r));
+  out.push('[4/5] ' + installTriggers());
+  var sec = checkSecurity();
+  out.push('[5/5] 보안 점검: ' + (sec.warnings.length ? '경고 ' + sec.warnings.join(' / ') : '모두 비공개'));
+  out.push('다음: 배포 → 새 배포 → 웹 앱(실행: 나). 액세스는 "나만"(혼자 시험) 또는 "Google 계정이 있는 모든 사용자"(임직원 접속코드 방식, 설정 AUTH_MODE=code).');
+  Logger.log(out.join('\n'));
+  return out;
+}

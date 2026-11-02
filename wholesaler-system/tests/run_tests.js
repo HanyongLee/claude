@@ -10,7 +10,7 @@ const { createGas } = require('./gas_mock');
 
 const GAS_DIR = path.join(__dirname, '..', 'gas');
 const ORDER = ['Config.gs', 'Logic.gs', 'Db.gs', 'Audit.gs', 'Auth.gs', 'Setup.gs', 'Pipeline.gs', 'Backup.gs',
-  'Master.gs', 'Metrics.gs', 'Signals.gs', 'Work.gs', 'Docs.gs', 'Performance.gs', 'Backtest.gs', 'Qa.gs', 'Notify.gs', 'Api.gs', 'VirtualData.gs', 'TestData.gs', 'Main.gs'];
+  'Master.gs', 'Metrics.gs', 'Signals.gs', 'Work.gs', 'Docs.gs', 'Performance.gs', 'Backtest.gs', 'Qa.gs', 'Notify.gs', 'Api.gs', 'VirtualData.gs', 'TestData.gs', 'Main.gs', 'Install.gs'];
 const OWNER = 'owner@example.invalid';
 const START = '2024-10-01', END = '2026-10-27';
 
@@ -29,7 +29,7 @@ function boot() {
   let tick = 0;
   const REAL0 = Date.now();
 // '오늘'은 고정하되 경과 시간은 실제로 흐르게 한다(실행시간 예산 검사용)
-class FrozenDate extends Date { constructor(...a) { if (!a.length) super(FROZEN + (tick++) * 1000); else super(...a); } static now() { return FROZEN + (Date.now() - REAL0); } }
+class FrozenDate extends Date { constructor(...a) { if (!a.length) super(FROZEN + (Date.now() - REAL0)); else super(...a); } static now() { return FROZEN + (Date.now() - REAL0); } }
   const ctx = vm.createContext(Object.assign({ Date: FrozenDate }, gas.globals));
   const code = ORDER.map(f => fs.readFileSync(path.join(GAS_DIR, f), 'utf8')).join('\n;\n');
   vm.runInContext(code, ctx, { filename: 'gas-bundle.js' });

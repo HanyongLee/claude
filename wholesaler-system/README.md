@@ -15,8 +15,9 @@
 | [docs/06_3단계_구현안내.md](docs/06_3단계_구현안내.md) | 3단계: 실적관리, 4분면 경계선, 백테스트·그림자 운영, 한계 |
 | [docs/07_3단계_검증결과.txt](docs/07_3단계_검증결과.txt) | 3단계 로컬 검증 출력(46개 통과) |
 | [docs/08_4단계_구현안내.md](docs/08_4단계_구현안내.md) | 4단계: 매뉴얼 질의, AI 연동 조건, 알림·보존·반출 기록, 전체 단계 요약 |
-| [docs/09_4단계_검증결과.txt](docs/09_4단계_검증결과.txt) | 4단계 로컬 검증 출력(27개 통과) |
+| [docs/09_4단계_검증결과.txt](docs/09_4단계_검증결과.txt) | 4단계 로컬 검증 출력(44개 통과, 접속코드 로그인 포함) |
+| [docs/10_간단설치_배포가이드.md](docs/10_간단설치_배포가이드.md) | 한 파일 설치, 웹앱 배포, 임직원 접속코드 배포 |
 
-빠른 시작: `gas/` 를 Apps Script 프로젝트에 올린 뒤 편집기에서 `setupSystem` → `loadVirtualData` → `runPipeline` → 웹앱 배포(나로 실행, 나만 접근).
+빠른 시작(관리자 1명, 15분): [docs/10_간단설치_배포가이드.md](docs/10_간단설치_배포가이드.md) — Apps Script API 켜기 → `Install.gs`·`appsscript.json` 붙여넣기 → `install` → `setupAll` → 웹앱 배포. 임직원은 설치 없이 링크 + 접속코드로 접속.
 
 로컬 검증: `node tests/run_tests.js` · `node tests/run_tests_phase2.js` · `node tests/run_tests_phase3.js` · `node tests/run_tests_phase4.js` (Node 18+, 추가 패키지 없음) · 화면 캡처: `node tests/render_ui.js <폴더>` (Playwright 필요)

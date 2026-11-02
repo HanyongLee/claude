@@ -75,7 +75,9 @@ var SCHEMA = {
       'approval_basis:text', 'approver:text'].concat(VERSION_COLS),
     M_EVIDENCE: ['evidence_id:text', 'wholesaler_id:text', 'target_table:text', 'target_id:text',
       'file_id:text', 'file_name:text', 'file_hash:text', 'doc_type:text', 'created_at:datetime', 'created_by:text'],
-    M_USER: ['user_id:text', 'name:text', 'role:text', 'status:text'].concat(AUDIT_COLS),
+    // 접속코드 방식(AUTH_MODE=code)용 컬럼: 코드는 해시만 저장, 세션 토큰도 해시만 저장
+    M_USER: ['user_id:text', 'name:text', 'role:text', 'status:text', 'code_hash:text', 'code_salt:text', 'code_issued_at:datetime',
+      'token_hash:text', 'token_expires:datetime', 'fail_count:num', 'lock_until:datetime', 'last_login:datetime'].concat(AUDIT_COLS),
     M_CALENDAR: ['date:date', 'is_auction_day:bool', 'note:text'],
     // 운영 기준값. 회사 내부 기준은 이 시트(드라이브)에만 두고 코드에는 가정값만 둔다. is_assumed=true 면 '가정값' 표시
     M_SETTING: ['key:text', 'value:text', 'label:text', 'unit:text', 'is_assumed:bool', 'note:text'].concat(AUDIT_COLS),
@@ -232,7 +234,10 @@ var SETTING_DEFAULTS = [
   ['AI_ENABLED', '아니오', '자유 질의응답 AI 사용: 예 | 아니오. "예"로 바꾸려면 AI_ORG_APPROVED=예 가 먼저 필요', ''],
   ['AI_ORG_APPROVED', '미확인', '조직의 외부 AI 사용 승인 여부: 미확인 | 예 | 아니오 (생성형 AI 보안서약서·클라우드 기준 확인 결과)', ''],
   ['AI_DATA_SCOPE', '매뉴얼본문만', 'AI에 제공하는 데이터 범위: 매뉴얼본문만 | 매뉴얼+익명수치 (중도매인 식별정보는 어떤 경우에도 제외)', ''],
-  ['AI_PROVIDER_NOTE', '', 'AI 서비스·비용·계약 확인 메모(서비스명, 단가, 데이터 보존 조건)', '']
+  ['AI_PROVIDER_NOTE', '', 'AI 서비스·비용·계약 확인 메모(서비스명, 단가, 데이터 보존 조건)', ''],
+  ['AUTH_MODE', 'google', '사용자 확인 방식: google(같은 Workspace 도메인 계정 식별) | code(관리자가 발급한 개인 접속코드로 로그인. 개인 Gmail·카톡 링크 배포용)', ''],
+  ['SESSION_HOURS', '12', '접속코드 방식 로그인 유지 시간', '시간'],
+  ['LOGIN_MAX_FAIL', '5', '접속코드 연속 실패 허용 횟수(초과 시 15분 잠금)', '회']
 ];
 
 var MATRIX_QUADRANTS = {

@@ -266,7 +266,8 @@ function saveUser_(admin, o, reason) {
       throw new Error('마지막 관리자의 역할·상태는 바꿀 수 없습니다.');
     }
     if (!cur) {
-      var row = { user_id: id, name: requireText_(o.name, '이름'), role: o.role, status: status };
+      var row = { user_id: id, name: requireText_(o.name, '이름'), role: o.role, status: status, code_hash: '', code_salt: '', code_issued_at: '',
+        token_hash: '', token_expires: '', fail_count: 0, lock_until: '', last_login: '' };
       Object.assign(row, newAuditFields_(admin));
       appendObjects_('DB_MASTER', 'M_USER', [row]);
       audit_(admin, 'CREATE', 'DB_MASTER', 'M_USER', id, null, row, reason);
@@ -274,6 +275,7 @@ function saveUser_(admin, o, reason) {
     }
     var before = JSON.parse(JSON.stringify(cur));
     cur.name = o.name || cur.name; cur.role = o.role; cur.status = status;
+    if (status !== '사용') { cur.token_hash = ''; cur.token_expires = ''; }
     cur.updated_at = nowStr_(); cur.updated_by = admin.user_id; cur.row_version = Number(cur.row_version) + 1;
     writeObject_('DB_MASTER', 'M_USER', cur);
     audit_(admin, 'UPDATE', 'DB_MASTER', 'M_USER', id, before, cur, reason);
@@ -314,7 +316,8 @@ var SETTING_CHOICES = {
   NOTIFY_EMAIL: ['예', '아니오'],
   AI_ENABLED: ['예', '아니오'],
   AI_ORG_APPROVED: ['미확인', '예', '아니오'],
-  AI_DATA_SCOPE: ['매뉴얼본문만', '매뉴얼+익명수치']
+  AI_DATA_SCOPE: ['매뉴얼본문만', '매뉴얼+익명수치'],
+  AUTH_MODE: ['google', 'code']
 };
 var SETTING_FREE_TEXT = ['LIMIT_BASE_AMOUNT', 'APPROVER_ROLE', 'MATRIX_Y_FIXED_SOURCE', 'AI_PROVIDER_NOTE'];
 

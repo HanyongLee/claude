@@ -7,11 +7,11 @@ const fs = require('fs'), path = require('path'), vm = require('vm');
 const { createGas } = require('./gas_mock');
 const GAS = path.join(__dirname, '..', 'gas');
 const ORDER = ['Config.gs', 'Logic.gs', 'Db.gs', 'Audit.gs', 'Auth.gs', 'Setup.gs', 'Pipeline.gs', 'Backup.gs', 'Master.gs', 'Metrics.gs', 'Signals.gs',
-  'Work.gs', 'Docs.gs', 'Performance.gs', 'Backtest.gs', 'Qa.gs', 'Notify.gs', 'Api.gs', 'VirtualData.gs', 'TestData.gs', 'Main.gs'];
+  'Work.gs', 'Docs.gs', 'Performance.gs', 'Backtest.gs', 'Qa.gs', 'Notify.gs', 'Api.gs', 'VirtualData.gs', 'TestData.gs', 'Main.gs', 'Install.gs'];
 const OWNER = 'owner@example.invalid', START = '2024-10-01', END = '2026-10-27';
 const FROZEN = new Date('2026-10-28T09:00:00+09:00').getTime(), REAL0 = Date.now();
 let tick = 0;
-class FrozenDate extends Date { constructor(...a) { if (!a.length) super(FROZEN + (tick++) * 1000); else super(...a); } static now() { return FROZEN + (Date.now() - REAL0); } }
+class FrozenDate extends Date { constructor(...a) { if (!a.length) super(FROZEN + (Date.now() - REAL0)); else super(...a); } static now() { return FROZEN + (Date.now() - REAL0); } }
 let pass = 0, fail = 0; const out = [];
 const ok = (c, n, d) => { c ? pass++ : fail++; out.push((c ? '  [통과] ' : '  [실패] ') + n + (d ? ' — ' + d : '')); };
 const section = (t) => out.push('\n■ ' + t);
@@ -119,6 +119,42 @@ section('백테스트: 데이터 품질 보류 반영');
   const sm = run(ctx, 'api_backtestStatus()').data.runs[0].summary;
   const hits = table(ctx, 'DB_AGG', 'A_BACKTEST_HIT').filter(h => h.run_id === r.run_id && h.wholesaler_id === 'W0101' && h.base_date >= '2026-09-15' && h.base_date <= '2026-10-15');
   ok(sm.held > 0 && hits.length === 0, '보류 중도매인·기간은 판정하지 않고 보류 건수로 집계', `보류 ${sm.held}건`);
+}
+
+section('접속코드 로그인 방식 (AUTH_MODE=code, 개인 Gmail·링크 배포용)');
+{
+  const anon = (src) => as(ctx, '', src);   // 이메일 식별 불가 상태(카톡 링크로 들어온 임직원)
+  ok(!anon(`api_login('auctioneer1@example.invalid', 'ABC')`).ok, '기본(google 모드)에서는 접속코드 로그인 거부');
+  ok(anon('api_authInfo()').data.mode === 'google' && !anon('api_authInfo()').data.googleIdentified, 'authInfo: 모드·식별 여부 제공(사용자 확인 전 호출 가능)');
+  run(ctx, `api_updateSetting('AUTH_MODE', 'code', false, '', '테스트')`);
+  ok(!anon(`api_login('auctioneer1@example.invalid', 'ABC')`).ok, '코드 미발급 사용자 로그인 거부');
+  ok(!as(ctx, 'credit1@example.invalid', `api_issueAccessCode('auctioneer1@example.invalid', 'x')`).ok, '채권담당 → 코드 발급 거부');
+  const iss = run(ctx, `api_issueAccessCode('auctioneer1@example.invalid', '테스트 발급')`).data;
+  ok(iss.code && iss.code.length === 10 && !/[IO01]/.test(iss.code), '관리자 코드 발급(10자, 혼동 문자 제외)', iss.code.replace(/./g, '*'));
+  const u = table(ctx, 'DB_MASTER', 'M_USER').find(x => x.user_id === 'auctioneer1@example.invalid');
+  ok(u.code_hash && u.code_hash !== iss.code && !JSON.stringify(table(ctx, 'DB_LOG', 'L_AUDIT')).includes(iss.code), '코드는 해시만 저장, 이력에도 코드 없음');
+  ok(!anon(`api_login('auctioneer1@example.invalid', 'WRONGCODE1')`).ok, '틀린 코드 거부');
+  const lg = anon(`api_login('auctioneer1@example.invalid', ${J(iss.code.toLowerCase())})`);
+  ok(lg.ok && lg.data.token && lg.data.user.role === 'AUCTIONEER', '올바른 코드(대소문자 무관) → 세션 토큰', lg.data && lg.data.expires);
+  const tok = lg.data.token;
+  const direct = anon('api_home()');
+  ok(!direct.ok, '토큰 없이 직접 호출: 거부(식별 불가)');
+  const viaTok = anon(`api_call(${J(tok)}, 'api_home', [])`);
+  const asg1 = table(ctx, 'DB_MASTER', 'M_ASSIGNMENT').filter(a => a.user_id === 'auctioneer1@example.invalid').length;
+  ok(viaTok.ok && viaTok.data.counts.myWholesalers === asg1, '토큰으로 api_call 경유 호출: 경매사1 담당 범위로 동작', `${viaTok.data && viaTok.data.counts.myWholesalers}명`);
+  ok(!anon(`api_call(${J(tok)}, 'api_get360', ['W0207'])`).ok, '토큰 사용자도 담당 외 중도매인은 거부(권한 규칙 동일)');
+  ok(!anon(`api_call(${J(tok)}, 'runPipeline', [])`).ok && !anon(`api_call(${J(tok)}, 'api_call', [])`).ok && !anon(`api_call(${J(tok)}, 'readTable_', ['DB_PII','P_GUARANTOR'])`).ok, 'api_* 외 함수 이름은 호출 불가');
+  ok(!anon(`api_call('bogus-token', 'api_home', [])`).ok && /SESSION_EXPIRED/.test(anon(`api_call('bogus-token', 'api_home', [])`).error), '잘못된 토큰 → 세션 만료 응답');
+  for (let i = 0; i < 5; i++) anon(`api_login('auctioneer1@example.invalid', 'WRONGCODE1')`);
+  const locked = anon(`api_login('auctioneer1@example.invalid', ${J(iss.code)})`);
+  ok(!locked.ok && /잠겨/.test(locked.error), '연속 5회 실패 → 15분 잠금(올바른 코드도 거부)', locked.error);
+  ok(anon(`api_call(${J(tok)}, 'api_logout', [])`).ok && !anon(`api_call(${J(tok)}, 'api_home', [])`).ok, '로그아웃 후 토큰 무효');
+  run(ctx, `api_saveUser({ user_id: 'auctioneer2@example.invalid', name: '(가상)경매사2', role: 'AUCTIONEER', status: '중지' }, '테스트')`);
+  const iss2 = run(ctx, `api_issueAccessCode('auctioneer2@example.invalid', '테스트')`).data;
+  ok(!anon(`api_login('auctioneer2@example.invalid', ${J(iss2.code)})`).ok, '중지된 사용자는 코드가 있어도 로그인 불가');
+  const lu = run(ctx, 'api_listUsers()').data[0];
+  ok(!('code_hash' in lu) && !('token_hash' in lu) && 'has_code' in lu, '사용자 목록 응답에 해시 미포함');
+  run(ctx, `api_updateSetting('AUTH_MODE', 'google', false, '', '테스트')`);
 }
 
 console.log('중도매인 통합관리 4단계 로컬 검증 (모의 Apps Script, 가상 데이터, 기준일 2026-10-28)');

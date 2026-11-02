@@ -4,14 +4,21 @@
 var S = { boot: null, cat: '전체' };
 
 /* ───── 공통 ───── */
-function call(fn) {
-  var args = Array.prototype.slice.call(arguments, 1);
+function token() { try { return localStorage.getItem('wm_token') || ''; } catch (e) { return ''; } }
+function setToken(t) { try { t ? localStorage.setItem('wm_token', t) : localStorage.removeItem('wm_token'); } catch (e) { /* 저장 불가 환경 */ } }
+function rawCall(fn, args) {
   return new Promise(function (resolve, reject) {
     var r = google.script.run
       .withSuccessHandler(function (res) { res && res.ok ? resolve(res.data) : reject(new Error(res ? res.error : '응답 없음')); })
       .withFailureHandler(function (e) { reject(e); });
     r[fn].apply(r, args);
   });
+}
+/* 접속코드 방식이면 토큰을 붙여 api_call 로 보내고, 세션 만료면 로그인 화면으로 */
+function call(fn) {
+  var args = Array.prototype.slice.call(arguments, 1);
+  var p = S.codeMode ? rawCall('api_call', [token(), fn, args]) : rawCall(fn, args);
+  return p.catch(function (e) { if (/SESSION_EXPIRED/.test(e.message)) { setToken(''); showLogin('세션이 만료되었습니다. 다시 로그인하세요.'); } throw e; });
 }
 function h(v) {
   return v === null || v === undefined ? '' : String(v).replace(/[&<>"']/g, function (c) {
@@ -559,7 +566,10 @@ function pageUsers() {
   loading();
   call('api_listUsers').then(function (rows) {
     var roles = { AUCTIONEER: '경매사', CREDIT: '채권담당', ADMIN: '관리자', VIEWER: '조회자' };
-    view('<h1>사용자·권한</h1>' + table([{ t: '이메일', k: 'user_id' }, { t: '이름', k: 'name' }, { t: '역할', f: function (r) { return h(roles[r.role] || r.role); } }, { t: '상태', f: function (r) { return badge(r.status === '사용' ? '정상' : '중지'); } }], rows, { id: 'uTbl', onRow: true }) +
+    view('<h1>사용자·권한</h1>' + table([{ t: '이메일', k: 'user_id' }, { t: '이름', k: 'name' }, { t: '역할', f: function (r) { return h(roles[r.role] || r.role); } }, { t: '상태', f: function (r) { return badge(r.status === '사용' ? '정상' : '중지'); } },
+      { t: '접속코드', f: function (r) { return (r.has_code ? '발급됨 ' + h(r.code_issued_at || '') : '<span class="muted">없음</span>') + (r.last_login ? '<br><span class="muted">최근 로그인 ' + h(r.last_login) + '</span>' : ''); } },
+      { t: '', f: function (r) { return '<button data-code="' + h(r.user_id) + '">' + (r.has_code ? '코드 재발급' : '코드 발급') + '</button>'; } }], rows, { id: 'uTbl', onRow: true }) +
+      '<div id="codeOut"></div>' +
       '<div class="card"><h2>등록·수정</h2><form class="f" id="uf"><label>이메일*<input name="user_id" required></label><label>이름*<input name="name" required></label>' +
       '<label>역할<select name="role">' + Object.keys(roles).map(function (k) { return '<option value="' + k + '">' + roles[k] + '</option>'; }).join('') + '</select></label>' +
       '<label>상태<select name="status"><option>사용</option><option>중지</option></select></label><label class="full">변경 사유*<input name="reason" required></label>' +
@@ -571,6 +581,13 @@ function pageUsers() {
     document.getElementById('uf').onsubmit = function (e) {
       e.preventDefault(); var o = formData(e.target), reason = o.reason; delete o.reason;
       call('api_saveUser', o, reason).then(function () { toast('저장했습니다.'); pageUsers(); }).catch(function (err) { toast(err.message, true); });
+    };
+    document.getElementById('view').onclick = function (e) {
+      var b = e.target.closest('button[data-code]'); if (!b) return; e.stopPropagation();
+      var reason = prompt('발급 사유'); if (!reason) return;
+      call('api_issueAccessCode', b.getAttribute('data-code'), reason).then(function (r) {
+        document.getElementById('codeOut').innerHTML = '<div class="note warn"><b>' + h(r.name) + ' (' + h(r.user_id) + ')</b> 접속코드: <code style="font-size:18px">' + h(r.code) + '</code><br>' + h(r.note) + '</div>';
+      }).catch(function (err) { toast(err.message, true); });
     };
   }).catch(fail);
 }
@@ -970,13 +987,34 @@ function pageQa(caseId) {
 }
 
 /* ───── 시작 ───── */
-call('api_bootstrap').then(function (b) {
-  S.boot = b;
-  document.getElementById('appVer').textContent = 'v' + b.app.version;
-  document.getElementById('who').textContent = b.user.name + ' (' + b.user.roleLabel + ')';
-  route();
-}).catch(function (e) {
-  document.getElementById('who').textContent = '';
-  view('<div class="note bad"><b>접속할 수 없습니다.</b><br>' + h(e.message || e) + '</div>');
-});
+function showLogin(msg) {
+  document.getElementById('who').innerHTML = '';
+  document.getElementById('nav').innerHTML = '';
+  view('<div class="card" style="max-width:420px;margin:40px auto"><h2>로그인</h2>' + (msg ? '<div class="note warn">' + h(msg) + '</div>' : '') +
+    '<form class="f" id="lf"><label class="full">이메일<input name="email" type="email" required autocomplete="username"></label><label class="full">접속코드<input name="code" required autocomplete="current-password" style="text-transform:uppercase"></label>' +
+    '<div class="full"><button class="primary">로그인</button></div></form><div class="note">접속코드는 관리자가 개인별로 발급합니다. 코드를 모르면 관리자에게 문의하세요. 공용 PC에서는 사용 후 로그아웃하세요.</div></div>');
+  document.getElementById('lf').onsubmit = function (e) {
+    e.preventDefault(); var o = formData(e.target);
+    rawCall('api_login', [o.email, o.code]).then(function (r) { setToken(r.token); start(); }).catch(function (err) { toast(err.message, true); });
+  };
+}
+function start() {
+  call('api_bootstrap').then(function (b) {
+    S.boot = b;
+    document.getElementById('appVer').textContent = 'v' + b.app.version;
+    document.getElementById('who').innerHTML = h(b.user.name) + ' (' + h(b.user.roleLabel) + ')' + (S.codeMode ? ' <button id="logout" style="margin-left:8px;padding:2px 8px;font-size:12px">로그아웃</button>' : '');
+    var lo = document.getElementById('logout'); if (lo) lo.onclick = function () { call('api_logout').catch(function () {}).then(function () { setToken(''); showLogin('로그아웃했습니다.'); }); };
+    if (!location.hash || location.hash === '#/') location.hash = '#/home';
+    route();
+  }).catch(function (e) {
+    if (S.codeMode) return showLogin(/SESSION_EXPIRED/.test(e.message) ? '' : e.message);
+    document.getElementById('who').textContent = '';
+    view('<div class="note bad"><b>접속할 수 없습니다.</b><br>' + h(e.message || e) + '</div>');
+  });
+}
+rawCall('api_authInfo', []).then(function (a) {
+  S.codeMode = a.mode === 'code' && !a.googleIdentified;   // Google 계정으로 식별되면 토큰 없이 그대로 사용
+  if (S.codeMode && !token()) return showLogin('');
+  start();
+}).catch(function (e) { view('<div class="note bad">' + h(e.message || e) + '</div>'); });
 </script>

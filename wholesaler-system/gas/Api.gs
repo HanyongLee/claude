@@ -98,7 +98,9 @@ function api_uploadEvidence(o) {
 
 function api_listUsers() {
   return apiCall_('user.manage', function () {
-    return readTable_('DB_MASTER', 'M_USER').filter(function (u) { return !u.is_deleted; }).map(stripInternal_);
+    return readTable_('DB_MASTER', 'M_USER').filter(function (u) { return !u.is_deleted; }).map(function (u) {
+      var o = stripInternal_(u); delete o.code_hash; delete o.code_salt; delete o.token_hash; o.has_code = !!u.code_hash; return o;
+    });
   });
 }
 function api_saveUser(o, reason) {
@@ -564,4 +566,45 @@ function api_exportCompare(category) {
 
 function api_sendDailySummaryNow() {
   return apiCall_('settings.edit', function (user) { return sendDailySummary_('웹앱:' + user.user_id); });
+}
+
+/* ───────────── 접속코드 방식 (AUTH_MODE=code) ───────────── */
+
+/** 로그인 화면 표시 여부 등 — 사용자 확인 전 호출 가능 */
+function api_authInfo() {
+  var settings = readSettings_();
+  var email = currentEmail_();
+  var known = !!(email && readTable_('DB_MASTER', 'M_USER').some(function (r) { return String(r.user_id).toLowerCase() === email && r.status === '사용' && !r.is_deleted; }));
+  return { ok: true, data: { mode: settings.AUTH_MODE || 'google', googleIdentified: known, app: { name: APP.NAME, version: APP.VERSION } } };
+}
+
+function api_login(email, code) {
+  _requestId = uid_('RQ');
+  try { return { ok: true, data: loginWithCode_(email, code) }; }
+  catch (e) { return { ok: false, error: String(e && e.message ? e.message : e) }; }
+}
+
+/**
+ * 접속코드 방식 공용 호출부: 토큰을 확인한 뒤 api_* 함수를 호출한다.
+ * fn 은 'api_' 로 시작하는 등록 함수 이름만 허용한다(임의 함수 호출 방지).
+ */
+function api_call(token, fn, args) {
+  _requestId = uid_('RQ');
+  if (typeof fn !== 'string' || fn.indexOf('api_') !== 0 || ['api_call', 'api_login', 'api_authInfo'].indexOf(fn) >= 0 || typeof this[fn] !== 'function') {
+    return { ok: false, error: '허용되지 않은 호출입니다.' };
+  }
+  if (!authenticateToken_(token)) {
+    logAccess_('', fn, '', '거부', '세션 없음·만료');
+    return { ok: false, error: 'SESSION_EXPIRED: 다시 로그인하세요.' };
+  }
+  try { return this[fn].apply(null, Array.isArray(args) ? args : []); }
+  finally { _tokenUser = null; }
+}
+
+function api_logout() {
+  return apiCall_(null, function (user) { return logoutToken_(user); });
+}
+
+function api_issueAccessCode(userId, reason) {
+  return apiCall_('user.manage', function (admin) { return issueAccessCode_(admin, userId, reason); });
 }
