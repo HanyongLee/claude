@@ -52,6 +52,10 @@ function continueBacktest_(timeBudgetMs, trigger) {
     var wholesalers = readTable_('DB_MASTER', 'M_WHOLESALER').filter(function (w) { return !w.is_deleted; });
     var statusHist = readTable_('DB_MASTER', 'M_WS_STATUS_HIST'), limitsAll = readTable_('DB_MASTER', 'M_LIMIT');
     var balIdx = balanceIndex_(daily), dailyByWs = indexDailyByWs_(daily);
+    // 데이터 품질 보류: 기준일 직전 30일에 누락·불일치가 있는 중도매인은 그 기준일 판정을 건너뛴다(운영과 같은 규칙)
+    var dqByWs = {};
+    readTable_('DB_AGG', 'A_DQ').forEach(function (d) { if (d.status !== '경고') (dqByWs[d.wholesaler_id] = dqByWs[d.wholesaler_id] || []).push(d.date); });
+    var heldCount = Number((JSON.parse(run.summary_json || '{}') || {}).held || 0);
     var hits = [], i = Number(run.next_index) || 0;
     for (; i < dates.length; i++) {
       if (Date.now() - t0 > timeBudgetMs) break;
@@ -61,6 +65,8 @@ function continueBacktest_(timeBudgetMs, trigger) {
       wholesalers.forEach(function (w) {
         var ws = w.wholesaler_id;
         if (w.trade_start_date && w.trade_start_date > d) return;
+        var from = addDays_(d, -APP.DQ_LOOKBACK_DAYS);
+        if ((dqByWs[ws] || []).some(function (x) { return x > from && x <= d; })) { heldCount++; return; }
         var m = computeMetrics_({ ws: ws, baseDate: d, daily: dailyByWs[ws] || [], monthly: monthly, calendar: calendar, limits: asOfVersions_(limitsAll, 'limit_id', ws, d),
           balByDate: balIdx[ws] || {}, tradeStart: w.trade_start_date, settings: settings, marketGrowth: market });
         evaluateSignals_({ settings: settings, metrics: m, bizStatus: statusOn_(statusHist, ws, d), expiring: [] }).forEach(function (h) {
@@ -73,11 +79,13 @@ function continueBacktest_(timeBudgetMs, trigger) {
     run.dates_done = i; run.next_index = i;
     if (i >= dates.length) {
       run.status = '완료'; run.finished_at = nowStr_();
-      run.summary_json = JSON.stringify(backtestSummary_(runId, settings));
+      var summary = backtestSummary_(runId, settings); summary.held = heldCount;
+      run.summary_json = JSON.stringify(summary);
       PropertiesService.getScriptProperties().deleteProperty(BT_STATE_KEY);
       PropertiesService.getScriptProperties().deleteProperty('BT_DATES_' + runId);
       clearBacktestTriggers_();
     } else {
+      run.summary_json = JSON.stringify({ held: heldCount });
       run.message = dates.length + '개 기준일 중 ' + i + '개 처리';
       clearBacktestTriggers_();
       ScriptApp.newTrigger('triggerContinueBacktest').timeBased().after(APP.CONTINUE_AFTER_MS).create();

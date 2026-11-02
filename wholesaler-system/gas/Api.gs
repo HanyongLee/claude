@@ -538,3 +538,30 @@ function api_saveTruth(o, reason) {
 function api_deleteTruth(truthId, reason) {
   return apiCall_('settings.edit', function (user) { return deleteTruth_(user, truthId, reason); });
 }
+
+/* ───────────── 4단계: 매뉴얼 질의 · 반출 기록 · 알림 ───────────── */
+
+function api_askManual(query, caseId) {
+  return apiCall_('work.view', function (user) { return answerQuestion_(user, query, caseId ? String(caseId) : ''); });
+}
+
+/** 비교표 CSV 를 서버에서 만들고 반출 기록을 남긴다 */
+function api_exportCompare(category) {
+  return apiCall_('ws.view', function (user) {
+    var p = performanceSummary_(user), cat = APP.CATEGORIES.indexOf(category) >= 0 ? category : APP.ALL;
+    var g = function (x) { return x.status === '정상' ? (x.value * 100).toFixed(1) : x.status; };
+    var lines = [['코드', '상호', '12개월구매', '구매일수', '전년동월대비(%)', '전년동기누적대비(%)', '회전율', '회수일수', '미수잔액', '연체금액', '데이터상태'].join(',')];
+    p.rows.slice().sort(function (a, b) { return b.byCategory[cat].amount12 - a.byCategory[cat].amount12; }).forEach(function (r) {
+      var c = r.byCategory[cat];
+      lines.push(toCsvLine_([r.wholesaler_id, r.name, c.amount12, c.days12, g(c.lastMonth.yoy), g(c.ytd.growth), r.turnover === null ? '' : r.turnover.toFixed(2),
+        r.collectionDays === null ? '' : r.collectionDays.toFixed(1), r.balance === null ? '' : r.balance, r.overdue === null ? '' : r.overdue, r.dataState]));
+    });
+    var name = '실적비교_' + p.meta.baseDate + '_' + cat + '.csv';
+    logAccess_(user.user_id, 'export.csv', name, '허용', p.rows.length + '행');
+    return { file_name: name, text: lines.join('\n') };
+  });
+}
+
+function api_sendDailySummaryNow() {
+  return apiCall_('settings.edit', function (user) { return sendDailySummary_('웹앱:' + user.user_id); });
+}

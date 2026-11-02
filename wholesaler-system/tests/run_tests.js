@@ -10,7 +10,7 @@ const { createGas } = require('./gas_mock');
 
 const GAS_DIR = path.join(__dirname, '..', 'gas');
 const ORDER = ['Config.gs', 'Logic.gs', 'Db.gs', 'Audit.gs', 'Auth.gs', 'Setup.gs', 'Pipeline.gs', 'Backup.gs',
-  'Master.gs', 'Metrics.gs', 'Signals.gs', 'Work.gs', 'Docs.gs', 'Performance.gs', 'Backtest.gs', 'Api.gs', 'VirtualData.gs', 'TestData.gs', 'Main.gs'];
+  'Master.gs', 'Metrics.gs', 'Signals.gs', 'Work.gs', 'Docs.gs', 'Performance.gs', 'Backtest.gs', 'Qa.gs', 'Notify.gs', 'Api.gs', 'VirtualData.gs', 'TestData.gs', 'Main.gs'];
 const OWNER = 'owner@example.invalid';
 const START = '2024-10-01', END = '2026-10-27';
 
@@ -362,7 +362,7 @@ section('실패 기록·재처리·실행시간 분할');
   ok(p2.status === '완료' && c.__gas.triggers.filter(t => t.getHandlerFunction() === 'triggerContinuePipeline').length === 0, '이어서 실행 완료 후 트리거 정리');
 
   run(c, 'installTriggers()');
-  ok(c.__gas.triggers.map(t => t.getHandlerFunction()).sort().join() === 'triggerDailyBackup,triggerDailyPipeline', '정기 트리거 설치(중복 없이 2개)');
+  ok(c.__gas.triggers.map(t => t.getHandlerFunction()).sort().join() === 'triggerDailyBackup,triggerDailyNotify,triggerDailyPipeline', '정기 트리거 설치(중복 없이 3개)');
 }
 
 /* ───────────── 백업·복구 ───────────── */

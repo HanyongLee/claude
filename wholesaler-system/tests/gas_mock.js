@@ -203,11 +203,14 @@ function createGas(opts) {
   const logs = [];
   const Logger = { log: (m) => { logs.push(String(m)); } };
   const MimeType = { CSV: 'text/csv' };
+  const mails = [];
+  const MailApp = { sendEmail: (o) => { mails.push(o); }, getRemainingDailyQuota: () => state.mailQuota === undefined ? 100 : state.mailQuota };
+  const UrlFetchApp = { fetch: () => { throw new Error('모의 환경: 외부 호출 없음'); } };
 
   return {
-    globals: { SpreadsheetApp, DriveApp, Utilities, PropertiesService, LockService, Session, ScriptApp, Logger, MimeType,
+    globals: { SpreadsheetApp, DriveApp, Utilities, PropertiesService, LockService, Session, ScriptApp, Logger, MimeType, MailApp, UrlFetchApp,
       HtmlService: {}, console: { log() {}, error: (e) => logs.push('ERR ' + e) } },
-    state, files, folders, triggers, logs, props, lockRelease: () => { lockHeld = false; }
+    state, files, folders, triggers, logs, props, mails, lockRelease: () => { lockHeld = false; }
   };
 }
 

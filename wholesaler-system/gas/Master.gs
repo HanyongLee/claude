@@ -310,9 +310,13 @@ var SETTING_CHOICES = {
   CATEGORY_AR_SPLIT: ['불가', '가능'],
   OVERDUE_DEFINITION: ['원천값'],
   MATRIX_X_MODE: ['당기중앙값'],
-  MATRIX_Y_MODE: ['당기중앙값', '전년고정', '목표값']
+  MATRIX_Y_MODE: ['당기중앙값', '전년고정', '목표값'],
+  NOTIFY_EMAIL: ['예', '아니오'],
+  AI_ENABLED: ['예', '아니오'],
+  AI_ORG_APPROVED: ['미확인', '예', '아니오'],
+  AI_DATA_SCOPE: ['매뉴얼본문만', '매뉴얼+익명수치']
 };
-var SETTING_FREE_TEXT = ['LIMIT_BASE_AMOUNT', 'APPROVER_ROLE', 'MATRIX_Y_FIXED_SOURCE'];
+var SETTING_FREE_TEXT = ['LIMIT_BASE_AMOUNT', 'APPROVER_ROLE', 'MATRIX_Y_FIXED_SOURCE', 'AI_PROVIDER_NOTE'];
 
 /** 기준값 변경: 값·가정 여부·비고. 변경 전후는 L_AUDIT 에 남고, 신호에는 판정 시점 값(params_json)이 저장된다. */
 function updateSetting_(user, key, value, isAssumed, note, reason) {
@@ -326,11 +330,23 @@ function updateSetting_(user, key, value, isAssumed, note, reason) {
       if (key === 'CATEGORY_AR_SPLIT' ? !(v === '불가' || v.indexOf('가능') === 0) : SETTING_CHOICES[key].indexOf(v) < 0)
         throw new Error(key + ' 값은 ' + SETTING_CHOICES[key].join(' | ') + ' 중 하나입니다.');
     } else if (SETTING_FREE_TEXT.indexOf(key) < 0 && v !== '' && !isFinite(Number(v))) throw new Error(key + ' 값은 숫자여야 합니다: ' + v);
+    // AI 는 조직 승인이 확인된 뒤에만 켤 수 있다. 승인을 '아니오'로 바꾸면 AI 도 함께 끈다
+    if (key === 'AI_ENABLED' && v === '예') {
+      var approved = readTable_('DB_MASTER', 'M_SETTING').filter(function (r) { return r.key === 'AI_ORG_APPROVED'; })[0];
+      if (!approved || approved.value !== '예') throw new Error('조직의 외부 AI 사용 승인(AI_ORG_APPROVED=예)이 확인되기 전에는 AI를 켤 수 없습니다.');
+    }
     var before = JSON.parse(JSON.stringify(row));
     row.value = v; row.is_assumed = !!isAssumed; row.note = note === undefined ? row.note : String(note);
     row.updated_at = nowStr_(); row.updated_by = user.user_id; row.row_version = Number(row.row_version) + 1;
     writeObject_('DB_MASTER', 'M_SETTING', row);
     audit_(user, 'UPDATE', 'DB_MASTER', 'M_SETTING', key, before, row, reason);
+    if (key === 'AI_ORG_APPROVED' && v !== '예') {
+      var ai = readTable_('DB_MASTER', 'M_SETTING').filter(function (r) { return r.key === 'AI_ENABLED'; })[0];
+      if (ai && ai.value === '예') {
+        var b2 = JSON.parse(JSON.stringify(ai)); ai.value = '아니오'; ai.updated_at = nowStr_(); ai.updated_by = user.user_id; ai.row_version = Number(ai.row_version) + 1;
+        writeObject_('DB_MASTER', 'M_SETTING', ai); audit_(user, 'UPDATE', 'DB_MASTER', 'M_SETTING', 'AI_ENABLED', b2, ai, '조직 승인 철회에 따라 자동 해제');
+      }
+    }
     return stripInternal_(row);
   });
 }

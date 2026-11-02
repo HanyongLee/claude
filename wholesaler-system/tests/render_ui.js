@@ -12,7 +12,7 @@ const { createGas } = require('./gas_mock');
 const GAS = path.join(__dirname, '..', 'gas');
 const OUT = process.argv[2] || '.';
 const ORDER = ['Config.gs', 'Logic.gs', 'Db.gs', 'Audit.gs', 'Auth.gs', 'Setup.gs', 'Pipeline.gs', 'Backup.gs',
-  'Master.gs', 'Metrics.gs', 'Signals.gs', 'Work.gs', 'Docs.gs', 'Performance.gs', 'Backtest.gs', 'Api.gs', 'VirtualData.gs', 'TestData.gs', 'Main.gs'];
+  'Master.gs', 'Metrics.gs', 'Signals.gs', 'Work.gs', 'Docs.gs', 'Performance.gs', 'Backtest.gs', 'Qa.gs', 'Notify.gs', 'Api.gs', 'VirtualData.gs', 'TestData.gs', 'Main.gs'];
 const OWNER = 'owner@example.invalid';
 
 (async () => {
@@ -65,12 +65,13 @@ class FrozenDate extends Date { constructor(...a) { if (!a.length) super(FROZEN 
       await page.goto('http://app.local/');
       const shots = who.tag === 'admin'
         ? [['home', ''], ['ws360', '#/ws/W0123'], ['import', '#/import'], ['master', '#/master/W0123'], ['ws360-past', '#/ws/W0123/2026-02-15'],
-           ['credit', '#/credit'], ['case', '#/case/' + caseId], ['rules', '#/rules'], ['docs', '#/docs'], ['perf', '#/perf'], ['perf-detail', '#/perf/W0123']]
+           ['credit', '#/credit'], ['case', '#/case/' + caseId], ['rules', '#/rules'], ['docs', '#/docs'], ['perf', '#/perf'], ['perf-detail', '#/perf/W0123'], ['qa', '#/qa/' + caseId]]
         : [['home', ''], ['ws360', '#/ws/W0101'], ['trend', '#/trend'], ['case', '#/case/' + caseId]];
       for (const [name, hash] of shots) {
         if (scheme === 'dark' && name !== 'ws360' && name !== 'case' && name !== 'perf') continue;
         await page.evaluate(h => { location.hash = h; }, hash);
         await page.waitForTimeout(600);
+        if (name === 'qa') { await page.fill('#qf input[name=q]', '연체 발생 시 결제계획 확인 절차'); await page.click('#qf button'); await page.waitForTimeout(800); await page.screenshot({ path: path.join(OUT, `${who.tag}-qa-answer-${scheme}.png`), fullPage: true }); }
         if (name === 'perf') { await page.click('#pTabs button[data-t="matrix"]'); await page.waitForTimeout(800); await page.screenshot({ path: path.join(OUT, `${who.tag}-matrix-${scheme}.png`), fullPage: true }); await page.click('#pTabs button[data-t="collect"]'); await page.waitForTimeout(500); }
         await page.screenshot({ path: path.join(OUT, `${who.tag}-${name}-${scheme}.png`), fullPage: true });
         const bad = await page.evaluate(() => Array.from(document.querySelectorAll('.note.bad')).map(n => n.textContent).join(' | '));

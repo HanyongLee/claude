@@ -64,7 +64,11 @@ function evaluateAll_(runId, trigger) {
       expiring: expiringFor_(ws, base, settings) }) : [];
   });
   // 기준일별 스냅샷: 같은 기준일 행은 교체, 다른 기준일은 보존
-  var kept = readTable_('DB_AGG', 'A_METRIC').filter(function (r) { return r.base_date !== base; }).map(stripInternal_);
+  // 보존 규칙: 최근 METRIC_KEEP_DAYS 는 매 기준일, 그 이전은 월말 경매일 스냅샷만 남긴다(판단 근거는 T_BASIS 에 따로 고정돼 있음)
+  var keepFrom = addDays_(base, -settingNum_(settings, 'METRIC_KEEP_DAYS', 45)), monthEnds = {};
+  calendar.forEach(function (c) { if (c.is_auction_day) { var ym = ymOf_(c.date); if (!monthEnds[ym] || c.date > monthEnds[ym]) monthEnds[ym] = c.date; } });
+  var monthEndSet = {}; Object.keys(monthEnds).forEach(function (ym) { monthEndSet[monthEnds[ym]] = true; });
+  var kept = readTable_('DB_AGG', 'A_METRIC').filter(function (r) { return r.base_date !== base && (r.base_date >= keepFrom || monthEndSet[r.base_date]); }).map(stripInternal_);
   rewriteTable_('DB_AGG', 'A_METRIC', kept.concat(metricRows));
 
   // 신호 구간 갱신 + 관리 건

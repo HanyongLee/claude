@@ -126,13 +126,14 @@ function checkSecurity() {
 /** [편집기 실행] 정기 처리 트리거 설치. 시각은 [가정]: 06시 처리, 02시 백업 */
 function installTriggers() {
   requireOwner_();
-  var mine = ['triggerDailyPipeline', 'triggerDailyBackup', 'triggerContinuePipeline', 'triggerContinueBacktest'];
+  var mine = ['triggerDailyPipeline', 'triggerDailyBackup', 'triggerContinuePipeline', 'triggerContinueBacktest', 'triggerDailyNotify'];
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (mine.indexOf(t.getHandlerFunction()) >= 0) ScriptApp.deleteTrigger(t);
   });
   ScriptApp.newTrigger('triggerDailyPipeline').timeBased().everyDays(1).atHour(6).create();
   ScriptApp.newTrigger('triggerDailyBackup').timeBased().everyDays(1).atHour(2).create();
-  return '트리거 설치: 매일 06시 정기 처리, 02시 백업';
+  ScriptApp.newTrigger('triggerDailyNotify').timeBased().everyDays(1).atHour(8).create();
+  return '트리거 설치: 매일 06시 정기 처리, 02시 백업, 08시 요약 알림(설정 NOTIFY_EMAIL=예 일 때만 발송)';
 }
 
 /** 없는 설정 키만 가정값으로 넣는다. 이미 입력된 실제 값은 건드리지 않는다. */

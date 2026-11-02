@@ -5,7 +5,7 @@
 
 var APP = {
   NAME: '중도매인 통합관리',
-  VERSION: '0.4.0-phase3',
+  VERSION: '0.5.0-phase4',
   TZ: 'Asia/Seoul',
   ROOT_FOLDER_NAME: '중도매인통합관리',
   OPEN_END: '9999-12-31',          // 종료일 미정 표시
@@ -226,7 +226,13 @@ var SETTING_DEFAULTS = [
   ['MATRIX_Y_FIXED_SOURCE', '', '세로축 고정값 출처(자동 산정 일시 또는 내부 목표 근거)', ''],
   ['BACKTEST_SAMPLE_DAYS', '5', '백테스트 표본 간격(경매일마다 → 5면 5경매일마다 판정)', '경매일'],
   ['BACKTEST_LEAD_MAX_DAYS', '90', '백테스트: 사안 발생 전 최대 몇 일 이내 신호를 "사전 포착"으로 볼지', '일'],
-  ['BACKTEST_HORIZON_DAYS', '90', '백테스트: 신호 후 몇 일 이내 사안 발생을 "적중"으로 볼지', '일']
+  ['BACKTEST_HORIZON_DAYS', '90', '백테스트: 신호 후 몇 일 이내 사안 발생을 "적중"으로 볼지', '일'],
+  ['METRIC_KEEP_DAYS', '45', '지표 스냅샷 보존: 최근 N일은 매 기준일, 그 이전은 월말 경매일만 보존', '일'],
+  ['NOTIFY_EMAIL', '아니오', '일일 요약 이메일 발송: 예 | 아니오 (금액·개인정보 미포함, 건수와 관리건ID만)', ''],
+  ['AI_ENABLED', '아니오', '자유 질의응답 AI 사용: 예 | 아니오. "예"로 바꾸려면 AI_ORG_APPROVED=예 가 먼저 필요', ''],
+  ['AI_ORG_APPROVED', '미확인', '조직의 외부 AI 사용 승인 여부: 미확인 | 예 | 아니오 (생성형 AI 보안서약서·클라우드 기준 확인 결과)', ''],
+  ['AI_DATA_SCOPE', '매뉴얼본문만', 'AI에 제공하는 데이터 범위: 매뉴얼본문만 | 매뉴얼+익명수치 (중도매인 식별정보는 어떤 경우에도 제외)', ''],
+  ['AI_PROVIDER_NOTE', '', 'AI 서비스·비용·계약 확인 메모(서비스명, 단가, 데이터 보존 조건)', '']
 ];
 
 var MATRIX_QUADRANTS = {

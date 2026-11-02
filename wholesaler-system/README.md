@@ -1,7 +1,7 @@
 # 중도매인 통합관리 시스템 (Google Apps Script)
 
 농산물 공판장 중도매인의 기초정보·거래실적·동향·채권관리를 중도매인코드와 관리 건 ID로 연결하는 업무 시스템.
-현재 **3단계(실적관리·거래·회수 매트릭스·기준값 백테스트)** 까지 구현했다. 저장소의 모든 자료는 가상이다.
+1~4단계(데이터·기초자료, 신호·관리 건·동향·조치·서식, 실적·4분면·백테스트, 매뉴얼 질의·운영 보완)를 구현했다. 외부 AI 호출은 조직 승인과 서비스 선정 후에만 켤 수 있다. 저장소의 모든 자료는 가상이다.
 
 회사 내부 기준(연체 정의·한도 결합·신호 기준값·매뉴얼·서식)은 저장소에 두지 않는다. 구글 드라이브의 설정 시트와 서식 폴더에서만 관리하며, 코드에는 "가정값"만 있다(`.gitignore` 참고).
 
@@ -14,7 +14,9 @@
 | [docs/05_2단계_검증결과.txt](docs/05_2단계_검증결과.txt) | 2단계 로컬 검증 출력(73개 통과) |
 | [docs/06_3단계_구현안내.md](docs/06_3단계_구현안내.md) | 3단계: 실적관리, 4분면 경계선, 백테스트·그림자 운영, 한계 |
 | [docs/07_3단계_검증결과.txt](docs/07_3단계_검증결과.txt) | 3단계 로컬 검증 출력(46개 통과) |
+| [docs/08_4단계_구현안내.md](docs/08_4단계_구현안내.md) | 4단계: 매뉴얼 질의, AI 연동 조건, 알림·보존·반출 기록, 전체 단계 요약 |
+| [docs/09_4단계_검증결과.txt](docs/09_4단계_검증결과.txt) | 4단계 로컬 검증 출력(27개 통과) |
 
 빠른 시작: `gas/` 를 Apps Script 프로젝트에 올린 뒤 편집기에서 `setupSystem` → `loadVirtualData` → `runPipeline` → 웹앱 배포(나로 실행, 나만 접근).
 
-로컬 검증: `node tests/run_tests.js` · `node tests/run_tests_phase2.js` · `node tests/run_tests_phase3.js` (Node 18+, 추가 패키지 없음) · 화면 캡처: `node tests/render_ui.js <폴더>` (Playwright 필요)
+로컬 검증: `node tests/run_tests.js` · `node tests/run_tests_phase2.js` · `node tests/run_tests_phase3.js` · `node tests/run_tests_phase4.js` (Node 18+, 추가 패키지 없음) · 화면 캡처: `node tests/render_ui.js <폴더>` (Playwright 필요)

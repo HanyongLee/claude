@@ -75,7 +75,7 @@ function bindRows(id, rows, fn) {
 function renderNav() {
   var items = [['home', '통합 홈', 'home.view'], ['trend', '동향관리', 'work.view'], ['credit', '채권관리', 'work.view'],
     ['ws', '중도매인 조회', 'ws.view'], ['master', '기초자료', 'master.edit'], ['approvals', '승인 대기', 'master.edit'],
-    ['perf', '실적관리', 'ws.view'], ['rules', '지표·신호 기준', 'work.view'], ['docs', '매뉴얼·서식', 'work.view'], ['import', '가져오기·오류 점검', 'import.view'],
+    ['perf', '실적관리', 'ws.view'], ['qa', '매뉴얼 질의', 'work.view'], ['rules', '지표·신호 기준', 'work.view'], ['docs', '매뉴얼·서식', 'work.view'], ['import', '가져오기·오류 점검', 'import.view'],
     ['users', '사용자·권한', 'user.manage'], ['audit', '변경·처리 이력', 'audit.view']];
   var cur = (location.hash.replace('#/', '').split('/')[0]) || 'home';
   document.getElementById('nav').innerHTML = items.filter(function (i) { return can(i[2]); }).map(function (i) {
@@ -105,6 +105,7 @@ function route() {
     master: p[1] ? function () { pageMasterDetail(decodeURIComponent(p[1])); } : pageMasterList,
     approvals: pageApprovals, import: pageImport, users: pageUsers, audit: pageAudit,
     trend: pageTrend, credit: pageCredit, rules: pageRules, docs: pageDocs, perf: function () { pagePerf(p[1] ? decodeURIComponent(p[1]) : ''); },
+    qa: function () { pageQa(p[1] ? decodeURIComponent(p[1]) : ''); },
     'case': function () { pageCase(decodeURIComponent(p[1] || '')); } }[page] || pageHome;
   renderStatus(S.boot.status);
   fn();
@@ -646,7 +647,7 @@ function pageCase(caseId) {
       { t: '근거 수치', wrap: true, f: function (s) { return h(evidenceText(s)); } }, { t: '판정 기준', wrap: true, f: function (s) { return '<span class="muted">' + h(Object.keys(s.params).filter(function (k) { return k.indexOf(s.rule_id) === 0; }).map(function (k) { return k + '=' + s.params[k]; }).join(', ')) + '</span>' + (s.false_alarm_reason ? '<br>' + h(s.false_alarm_reason) : ''); } },
       { t: '', f: function (s) { return (s.status === '연결' || s.status === '발생') && can('signal.flag') ? '<button data-fa="' + h(s.signal_id) + '">오탐 ' + (can('case.manage') ? '확정' : '의견') + '</button>' : ''; } }], d.signals, { empty: '신호 없음(수동 개시)' }) + '</div>';
     // 절차 안내
-    html += '<div class="card span2"><h2>절차·서식 안내</h2><div class="note">[기준] 데이터 기준일 ' + h(g.basis.data_base_date) + ' (' + h(g.basis.data_status) + ') · 매뉴얼: ' + (g.basis.manual_versions.map(h).join(', ') || '등록된 문서 없음') + '</div>' +
+    html += '<div class="card span2"><h2>절차·서식 안내 <a href="#/qa/' + encodeURIComponent(caseId) + '" style="font-size:12px;font-weight:400">이 관리 건으로 매뉴얼 질의 →</a></h2><div class="note">[기준] 데이터 기준일 ' + h(g.basis.data_base_date) + ' (' + h(g.basis.data_status) + ') · 매뉴얼: ' + (g.basis.manual_versions.map(h).join(', ') || '등록된 문서 없음') + '</div>' +
       '<h3>1. 확인된 상황</h3>' + (g.facts.length ? '<ul>' + g.facts.map(function (f) { return '<li>' + h(f) + '</li>'; }).join('') + '</ul>' : '<p class="muted">—</p>') +
       '<h3>2. 추가 확인사항</h3>' + (g.furtherChecks.length ? '<ul>' + g.furtherChecks.map(function (f) { return '<li>' + h(f) + '</li>'; }).join('') + '</ul>' : '<p class="muted">—</p>') +
       '<h3>3·4·5. 적용 가능한 절차 · 근거 · 필요 서식</h3>' +
@@ -742,7 +743,7 @@ function pageRules() {
     var html = '<h1>지표·신호 기준 관리</h1><div class="note">값은 드라이브의 기준 시트(M_SETTING)에만 저장됩니다. <b>가정값</b>은 내부 기준 확인 전 임시값입니다. 변경 전후는 이력에 남고, 각 신호에는 판정 시점의 기준값이 함께 저장됩니다.</div>';
     html += table([{ t: '키', k: 'key' }, { t: '설명', k: 'label', wrap: true }, { t: '값', f: function (r) { return '<b>' + h(r.value) + '</b> ' + h(r.unit); } }, { t: '구분', f: function (r) { return r.is_assumed ? '<span class="badge b-warn">가정값</span>' : '<span class="badge b-ok">확정</span>'; } }, { t: '비고', k: 'note', wrap: true },
       { t: '', f: function (r) { return d.canEdit ? '<button data-k="' + h(r.key) + '">변경</button>' : ''; } }], d.settings, { id: 'stTbl' });
-    if (d.canEdit) html += '<div class="row"><button id="blBtn">매트릭스 세로축 기준선 재산정(전년 연간 중앙값)</button></div>';
+    if (d.canEdit) html += '<div class="row"><button id="blBtn">매트릭스 세로축 기준선 재산정(전년 연간 중앙값)</button><button id="ntBtn">일일 요약 메일 지금 발송(설정 NOTIFY_EMAIL=예 일 때)</button></div>';
     html += '<div class="card" style="margin-top:12px" id="btCard"><h2>백테스트·그림자 운영</h2><p class="muted">불러오는 중…</p></div>';
     if (d.canEdit) html += '<div class="card" style="margin-top:12px"><h2>시뮬레이션 (저장 안 함)</h2><div class="row"><input id="simKey" placeholder="키 (예: S01_DROP_PCT)"><input id="simVal" placeholder="값"><button id="simGo">최신 기준일 신호 건수 보기</button></div><div id="simOut"></div><div class="note">저장하지 않고 최신 기준일만 계산합니다. 과거 기준일 전체는 위 백테스트를 사용하세요.</div></div>';
     view(html);
@@ -756,6 +757,7 @@ function pageRules() {
       call('api_updateSetting', k, v, !confirmed, confirmed ? reason : cur.note, reason).then(function () { toast('변경했습니다. 다음 정기 처리부터 적용됩니다.'); pageRules(); }).catch(function (err) { toast(err.message, true); });
     };
     renderBacktest(d.canEdit);
+    var nt = document.getElementById('ntBtn'); if (nt) nt.onclick = function () { call('api_sendDailySummaryNow').then(function (r) { toast(r.sent ? r.sent + '명 발송' : '발송 안 함: ' + (r.skipped || '')); }).catch(function (e) { toast(e.message, true); }); };
     var bl = document.getElementById('blBtn'); if (bl) bl.onclick = function () { bl.disabled = true; call('api_computeMatrixBaseline').then(function (r) { toast('기준선 ' + r.value + '회 저장'); pageRules(); }).catch(function (e) { bl.disabled = false; toast(e.message, true); }); };
     var sg = document.getElementById('simGo');
     if (sg) sg.onclick = function () {
@@ -840,6 +842,8 @@ function pagePerf(wsId) {
       if (S.perfTab === 'matrix') { body.innerHTML = '<p class="muted">불러오는 중…</p>'; call('api_matrix', S.cat).then(function (mx) { body.innerHTML = matrixHtml(mx); bindRows('mxTbl', mx.points, function (r) { location.hash = '#/ws/' + encodeURIComponent(r.wholesaler_id); }); }).catch(function (e) { body.innerHTML = '<div class="note bad">' + h(e.message) + '</div>'; }); return; }
       body.innerHTML = perfTabHtml(p, S.perfTab, S.cat);
       bindRows('pTbl', p.rows, function (r) { location.hash = '#/perf/' + encodeURIComponent(r.wholesaler_id); });
+      var cb = document.getElementById('csvBtn');
+      if (cb) cb.onclick = function () { cb.disabled = true; call('api_exportCompare', S.cat).then(function (r) { downloadText(r.file_name, '\uFEFF' + r.text); cb.disabled = false; }).catch(function (e) { cb.disabled = false; toast(e.message, true); }); };
     };
     document.getElementById('pTabs').onclick = function (e) { var t = e.target.getAttribute('data-t'); if (t) { S.perfTab = t; draw(); } };
     document.getElementById('pCats').onclick = function (e) { var c = e.target.getAttribute('data-c'); if (c) { S.cat = c; draw(); } };
@@ -879,11 +883,11 @@ function perfTabHtml(p, tab, cat) {
     var g1 = c(r).lastMonth.yoy, g2 = c(r).ytd.growth;
     return [r.wholesaler_id, r.name, c(r).amount12, c(r).days12, g1.status === '정상' ? (g1.value * 100).toFixed(1) : g1.status, g2.status === '정상' ? (g2.value * 100).toFixed(1) : g2.status, r.turnover === null ? '' : r.turnover.toFixed(2), r.collectionDays === null ? '' : r.collectionDays.toFixed(1), r.balance === null ? '' : r.balance, r.overdue === null ? '' : r.overdue];
   })).map(function (row) { return row.map(function (v) { return /[",\n]/.test(String(v)) ? '"' + String(v).replace(/"/g, '""') + '"' : v; }).join(','); }).join('\n');
-  S._csv = csv;
-  return '<div class="row"><button id="csvBtn">비교표 다운로드(CSV)</button><span class="muted">기준일 ' + h(m.baseDate) + ' · ' + h(cat) + ' · 다운로드는 접근 기록 대상이 아닌 화면 자료입니다</span></div>' +
+  void csv;
+  return '<div class="row"><button id="csvBtn">비교표 다운로드(CSV)</button><span class="muted">기준일 ' + h(m.baseDate) + ' · ' + h(cat) + ' · 다운로드는 반출 기록에 남습니다</span></div>' +
     table([{ t: '순위', num: true, f: function (r, i) { return ''; } }, nameCol, { t: '12개월 구매', num: true, f: function (r) { return won(c(r).amount12); } }, { t: '전년 동월', num: true, f: function (r) { return pct(c(r).lastMonth.yoy); } }, { t: '전년 누적', num: true, f: function (r) { return pct(c(r).ytd.growth); } },
       { t: '회전율', num: true, f: function (r) { return r.turnover === null ? '—' : r.turnover.toFixed(2); } }, { t: '회수일수', num: true, f: function (r) { return r.collectionDays === null ? '—' : r.collectionDays.toFixed(1); } }, { t: '미수 잔액', num: true, f: function (r) { return won(r.balance); } }, { t: '연체', num: true, f: function (r) { return won(r.overdue); } }], rows, { id: 'pTbl', onRow: true }) +
-    '<script>document.getElementById("csvBtn").onclick=function(){downloadText("실적비교_' + h(m.baseDate) + '_' + h(cat) + '.csv","\uFEFF"+S._csv);};</' + 'script>';
+    '';
 }
 function pagePerfDetail(wsId) {
   loading();
@@ -935,6 +939,34 @@ function matrixHtml(mx) {
   html += '<h3>그래프 밖 (분류 제외)</h3>' + table([{ t: '중도매인', f: function (p) { return h(p.wholesaler_id + ' ' + p.name); } }, { t: '사유', k: 'reason' }, { t: '12개월 구매', num: true, f: function (p) { return won(p.x); } }], mx.excluded, { empty: '없음' });
   html += '<div class="note">경계선: 가로축은 부류 필터별 당기 중앙값, 세로축은 전년도 연간 중앙값 고정(지표·신호 기준 화면 "기준선 재산정") 또는 내부 목표값. 산정 시각 ' + h(mx.boundaries.computedAt) + '</div>';
   return html;
+}
+
+/* ───── 매뉴얼 질의 ───── */
+function pageQa(caseId) {
+  view('<h1>매뉴얼 질의</h1><div class="note">등록된 매뉴얼·절차에서 근거를 찾아 답합니다. 근거가 없으면 절차를 만들지 않고 "확인 필요"로 답합니다. 자유 질의 AI는 조직 승인 후 설정에서 켤 수 있으며, 꺼져 있어도 이 화면은 동작합니다.</div>' +
+    '<form class="row" id="qf"><input name="q" style="flex:1;min-width:240px" placeholder="예: 연체 30일 넘었을 때 절차, 담보 재평가 주기" required>' + (caseId ? '<span class="badge b-info">관리 건 ' + h(caseId) + '</span>' : '') + '<button class="primary">질의</button></form><div id="qa"></div>');
+  document.getElementById('qf').onsubmit = function (e) {
+    e.preventDefault();
+    var q = document.getElementById('qf').q.value;
+    document.getElementById('qa').innerHTML = '<p class="muted">검색 중…</p>';
+    call('api_askManual', q, caseId).then(function (a) {
+      var html = '<div class="card"><div class="note">[기준] 중도매인 데이터 기준일 ' + h(a.basis.data_base_date) + ' (' + h(a.basis.data_status) + ') · 매뉴얼: ' + (a.basis.manual_versions.map(h).join(', ') || '등록 문서 없음') + '</div>' +
+        '<p><b>' + h(a.query) + '</b> ' + badge(a.status) + '</p>' + (a.message ? '<div class="note ' + (a.status === '충돌' ? 'bad' : 'warn') + '">' + h(a.message) + '</div>' : '') +
+        '<h3>1. 확인된 상황</h3>' + (a.facts.length ? '<ul>' + a.facts.map(function (f) { return '<li>' + h(f) + '</li>'; }).join('') + '</ul>' : '<p class="muted">' + (caseId ? '—' : '관리 건을 지정하면 그 건의 신호·확인 결과가 표시됩니다') + '</p>') +
+        '<h3>2. 추가 확인사항</h3>' + (a.furtherChecks.length ? '<ul>' + a.furtherChecks.map(function (f) { return '<li>' + h(f) + '</li>'; }).join('') + '</ul>' : '<p class="muted">—</p>') +
+        '<h3>3. 적용 가능한 절차 · 4. 근거</h3>' + (a.procedures.length ? a.procedures.map(function (p) {
+          var head = '<p><b>' + h(p.label) + '</b> <span class="muted">(' + h(p.situation_code) + ')</span> ' + badge(p.status) + '</p>';
+          if (!p.steps.length) return head + '<div class="note warn">' + h(p.message) + '</div>';
+          return head + (p.status === '충돌' ? '<div class="note bad">' + h(p.message) + '</div>' : '') + table([{ t: '단계', num: true, k: 'step_no' }, { t: '절차', k: 'content', wrap: true }, { t: '확인사항', k: 'checks', wrap: true },
+            { t: '근거(문서·버전·조항·쪽수·시행일)', wrap: true, f: function (s) { return h(s.doc_name + ' ' + s.version + ' ' + s.article) + (s.page ? ' p.' + h(s.page) : '') + '<br><span class="muted">시행 ' + h(s.effective_from) + '</span>'; } }], p.steps);
+        }).join('') : '<p class="muted">해당 절차 없음</p>') +
+        '<h3>5. 필요 서식</h3>' + (a.forms.length ? '<ul>' + a.forms.map(function (f) { return '<li>' + h(f.form_name + ' ' + f.version) + (f.available ? ' <button data-blank="' + h(f.form_doc_id) + '">빈 서식</button>' : ' <span class="badge b-warn">파일 없음</span>') + '</li>'; }).join('') + '</ul>' : '<p class="muted">—</p>') +
+        '<h3>6. 다음 할 일</h3><ul>' + a.nextSteps.map(function (n) { return '<li>' + h(n) + '</li>'; }).join('') + '</ul>' +
+        '<h3>AI 답변(선택 기능)</h3>' + (a.ai.used ? '<div class="note">' + h(a.ai.text) + '<br><span class="muted">' + h(a.ai.note) + '</span></div>' : '<p class="muted">' + h(a.ai.status) + ' — ' + h(a.ai.reason) + '</p>') + '</div>';
+      document.getElementById('qa').innerHTML = html;
+      document.getElementById('qa').onclick = function (ev) { var b = ev.target.closest('button[data-blank]'); if (b) call('api_blankForm', b.getAttribute('data-blank')).then(function (r) { window.open(r.url, '_blank'); }).catch(function (x) { toast(x.message, true); }); };
+    }).catch(function (e) { document.getElementById('qa').innerHTML = '<div class="note bad">' + h(e.message) + '</div>'; });
+  };
 }
 
 /* ───── 시작 ───── */
