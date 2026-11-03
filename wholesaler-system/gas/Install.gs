@@ -17,12 +17,12 @@ var INSTALL_SOURCE = {
   owner: 'HanyongLee', repo: 'claude', branch: 'claude/wholesaler-management-system-ae6ph9', dir: 'wholesaler-system/gas',
   files: ['appsscript.json', 'Config.gs', 'Logic.gs', 'Db.gs', 'Audit.gs', 'Auth.gs', 'Setup.gs', 'Pipeline.gs', 'Backup.gs', 'Master.gs',
     'Metrics.gs', 'Signals.gs', 'Work.gs', 'Docs.gs', 'Performance.gs', 'Backtest.gs', 'Qa.gs', 'Notify.gs', 'Api.gs',
-    'VirtualData.gs', 'TestData.gs', 'Main.gs', 'Install.gs', 'Index.html', 'Styles.html', 'Client.html']
+    'VirtualData.gs', 'TestData.gs', 'Main.gs', 'Install.gs', 'NhImport.gs', 'Snapshot.gs', 'Index.html', 'Styles.html', 'Client.html', 'SnapshotTemplate.html']
 };
 
 /** 설치 전 appsscript.json 에 붙여넣을 내용(설치가 이 매니페스트의 권한 범위를 필요로 한다) */
 var INSTALL_MANIFEST = JSON.stringify({
-  timeZone: 'Asia/Seoul', dependencies: {}, exceptionLogging: 'STACKDRIVER', runtimeVersion: 'V8',
+  timeZone: 'Asia/Seoul', dependencies: { enabledAdvancedServices: [{ userSymbol: 'Drive', version: 'v3', serviceId: 'drive' }] }, exceptionLogging: 'STACKDRIVER', runtimeVersion: 'V8',
   oauthScopes: ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive',
     'https://www.googleapis.com/auth/script.scriptapp', 'https://www.googleapis.com/auth/script.projects',
     'https://www.googleapis.com/auth/script.external_request', 'https://www.googleapis.com/auth/script.send_mail',

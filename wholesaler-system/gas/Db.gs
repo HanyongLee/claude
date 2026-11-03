@@ -125,11 +125,16 @@ function rewriteTable_(db, table, objs) {
 }
 
 /** 스크립트 잠금 안에서 실행 (쓰기 경합·중복 생성 방지) */
+var _lockDepth = 0;   // 같은 실행 안에서 중첩 호출(정기 처리 → 보고서 적재 등)은 잠금을 다시 잡지 않는다
 function withLock_(fn, waitMs) {
+  if (_lockDepth > 0) { _lockDepth++; try { return fn(); } finally { _lockDepth--; } }
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(waitMs || 30000)) throw new Error('다른 작업이 진행 중입니다. 잠시 후 다시 시도하세요.');
-  try { return fn(); } finally { lock.releaseLock(); }
+  _lockDepth = 1;
+  try { return fn(); } finally { _lockDepth = 0; lock.releaseLock(); }
 }
+/** 파이프라인처럼 직접 잠금을 잡는 곳에서 중첩 허용을 켠다 */
+function markLocked_(on) { _lockDepth = on ? Math.max(1, _lockDepth) : 0; }
 
 /**
  * 행 버전 검사 후 수정 (동시 수정 충돌 방지)

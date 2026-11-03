@@ -8,7 +8,7 @@ const fs = require('fs'), path = require('path'), vm = require('vm');
 const { createGas } = require('./gas_mock');
 const GAS = path.join(__dirname, '..', 'gas');
 const ORDER = ['Config.gs', 'Logic.gs', 'Db.gs', 'Audit.gs', 'Auth.gs', 'Setup.gs', 'Pipeline.gs', 'Backup.gs',
-  'Master.gs', 'Metrics.gs', 'Signals.gs', 'Work.gs', 'Docs.gs', 'Performance.gs', 'Backtest.gs', 'Qa.gs', 'Notify.gs', 'Api.gs', 'VirtualData.gs', 'TestData.gs', 'Main.gs', 'Install.gs'];
+  'Master.gs', 'Metrics.gs', 'Signals.gs', 'Work.gs', 'Docs.gs', 'Performance.gs', 'Backtest.gs', 'Qa.gs', 'Notify.gs', 'Api.gs', 'VirtualData.gs', 'TestData.gs', 'Main.gs', 'Install.gs', 'NhImport.gs', 'Snapshot.gs'];
 const OWNER = 'owner@example.invalid', START = '2024-10-01', END = '2026-10-27';
 const FROZEN = new Date('2026-10-28T09:00:00+09:00').getTime();
 let tick = 0;
@@ -221,7 +221,7 @@ section('관리 건 묶음 규칙: 수동 개시·재발');
 section('기준값 관리');
 {
   const r = run(ctx, 'api_settings()').data;
-  ok(r.settings.length === 41 && r.settings.every(s => s.is_assumed === true || s.key === 'S01_DROP_PCT'), '기준값 41개 적재, 모두 "가정값" 표시', `${r.settings.length}개`);
+  ok(r.settings.length === 44 && r.settings.every(s => s.is_assumed === true || s.key === 'S01_DROP_PCT'), '기준값 44개 적재, 모두 "가정값" 표시', `${r.settings.length}개`);
   ok(!run(ctx, `api_updateSetting('LIMIT_COMBINE', '마음대로', false, '', 'x')`).ok, '허용되지 않은 결합 방식 값 거부');
   const upd = run(ctx, `api_updateSetting('LIMIT_COMBINE', '기본한도만', false, '(가상) 규정 제3조', '규정 확인')`);
   ok(upd.ok && upd.data.is_assumed === false, '결합 방식 확정 입력 → 가정 표시 해제');

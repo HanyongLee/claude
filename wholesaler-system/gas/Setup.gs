@@ -175,3 +175,24 @@ function setupAll_(withVirtual) {
   Logger.log(out.join('\n'));
   return out;
 }
+
+/**
+ * [편집기 실행] 기존 드라이브 폴더(예: 담당자의 '2611_AI혁신센터_채권관리')를 시스템 루트로 지정한다.
+ * 폴더 안에 하위 폴더·저장소 시트를 만들고, 폴더에 이미 있는 엑셀 파일은 다음 정기 처리 때 자동으로 읽는다.
+ * @param folderIdOrName 폴더 ID 또는 이름(이름이면 내 드라이브에서 같은 이름의 첫 폴더)
+ */
+function setupWithFolder(folderIdOrName) {
+  requireOwner_();
+  var folder = null;
+  try { folder = DriveApp.getFolderById(folderIdOrName); } catch (e) { folder = null; }
+  if (!folder) {
+    var it = DriveApp.getFoldersByName(folderIdOrName);
+    if (!it.hasNext()) throw new Error('폴더를 찾을 수 없습니다: ' + folderIdOrName + ' (폴더 ID 또는 정확한 이름)');
+    folder = it.next();
+  }
+  setProp_('ROOT_FOLDER_ID', folder.getId());
+  var r = setupSystem();
+  r.unshift('루트 폴더 지정: ' + folder.getName() + ' (' + folder.getId() + ')');
+  Logger.log(r.join('\n'));
+  return r;
+}

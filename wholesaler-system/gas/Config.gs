@@ -5,7 +5,7 @@
 
 var APP = {
   NAME: '중도매인 통합관리',
-  VERSION: '0.5.0-phase4',
+  VERSION: '0.6.0-hybrid',
   TZ: 'Asia/Seoul',
   ROOT_FOLDER_NAME: '중도매인통합관리',
   OPEN_END: '9999-12-31',          // 종료일 미정 표시
@@ -16,7 +16,7 @@ var APP = {
   EXPIRY_WARN_DAYS: 60,            // [가정] 담보·보증 기한 도래 표시 기준
   DQ_LOOKBACK_DAYS: 30,            // 통합 상세에서 데이터 이상을 확인하는 기간
   ALLOW_SELF_APPROVAL: false,      // 요청자 본인 승인 금지
-  CATEGORIES: ['과일', '채소'],
+  CATEGORIES: ['과일', '채소', '기타'],   // 기타 = 곡류·특작·절화·관엽·분화 등(농협 대분류 매핑)
   ALL: '전체',
   OVERDUE_TERMS_NOTE: '연체 정의는 내부 규정 확인 전까지 원천 제공값을 그대로 표시'
 };
@@ -35,8 +35,12 @@ var FOLDERS = {
   FORMS: '10_원본서식',
   CASES: '20_관리건',
   EVIDENCE: '30_증빙',
+  DEPLOY: '40_배포',
   BACKUP: '90_백업'
 };
+
+/** 농협 전산(EBFW916007 등) 추출 파일의 대분류명 → 시스템 부류 */
+var NH_CATEGORY_MAP = { '과일': '과일', '채소': '채소', '곡류': '기타', '특작': '기타', '절화': '기타', '관엽': '기타', '분화': '기타' };
 
 /** 기초·업무 테이블 공통 감사 필드 */
 var AUDIT_COLS = [
@@ -103,6 +107,8 @@ var SCHEMA = {
     R_SALES: ['row_key:text', 'content_hash:text', 'batch_id:text', 'source_txn_no:text', 'line_no:text',
       'txn_date:date', 'wholesaler_id:text', 'category:text', 'amount:num', 'txn_type:text',
       'correction_type:text', 'orig_txn_no:text', 'loaded_at:datetime'],
+    // 월 합계만 있는 기간(농협 사업실적 월별 추출)용. 일별 자료가 있는 달에는 쓰지 않는다
+    R_SALES_MONTHLY: ['row_key:text', 'content_hash:text', 'batch_id:text', 'ym:text', 'wholesaler_id:text', 'amount:num', 'weight:num', 'loaded_at:datetime'],
     R_RECEIPT: ['row_key:text', 'content_hash:text', 'batch_id:text', 'source_receipt_no:text',
       'receipt_date:date', 'posted_date:date', 'wholesaler_id:text', 'amount:num', 'receipt_type:text',
       'loaded_at:datetime'],
@@ -237,7 +243,10 @@ var SETTING_DEFAULTS = [
   ['AI_PROVIDER_NOTE', '', 'AI 서비스·비용·계약 확인 메모(서비스명, 단가, 데이터 보존 조건)', ''],
   ['AUTH_MODE', 'google', '사용자 확인 방식: google(같은 Workspace 도메인 계정 식별) | code(관리자가 발급한 개인 접속코드로 로그인. 개인 Gmail·카톡 링크 배포용)', ''],
   ['SESSION_HOURS', '12', '접속코드 방식 로그인 유지 시간', '시간'],
-  ['LOGIN_MAX_FAIL', '5', '접속코드 연속 실패 허용 횟수(초과 시 15분 잠금)', '회']
+  ['LOGIN_MAX_FAIL', '5', '접속코드 연속 실패 허용 횟수(초과 시 15분 잠금)', '회'],
+  ['NH_AUTO_REGISTER_WS', '예', '농협 실적 파일에 있는 미등록 중도매인을 자동 등록: 예 | 아니오(거부 행으로 남김)', ''],
+  ['SNAPSHOT_ENABLED', '예', '정기 처리 후 배포용 스냅샷 HTML 생성(40_배포 폴더): 예 | 아니오', ''],
+  ['SNAPSHOT_EMAIL', '아니오', '스냅샷 HTML을 담당자 이메일로 첨부 발송: 예 | 아니오 (사내망 전달용. 금액 포함 파일이므로 조직 기준 확인 후)', '']
 ];
 
 var MATRIX_QUADRANTS = {

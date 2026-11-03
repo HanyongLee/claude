@@ -31,8 +31,11 @@ function openCaseManually_(user, wsId, reason) {
     if (open) return { existing: true, caseRow: stripInternal_(open) };
     var settings = readSettings_(), today = todayStr_();
     var decision = decideCase_(readTable_('DB_WORK', 'T_CASE').filter(function (c) { return c.wholesaler_id === wsId; }), [{ rule_id: 'MANUAL' }], today, settings);
-    var c = createCase_(user, wsId, today, decision.action === 'recur' ? decision.parentId : '', '수동: ' + reason, settings, readTable_('DB_MASTER', 'M_CALENDAR'));
-    c.owner_id = user.user_id; c.row_version = 2; writeObject_('DB_WORK', 'T_CASE', c);
+    var created = createCase_(user, wsId, today, decision.action === 'recur' ? decision.parentId : '', '수동: ' + reason, settings, readTable_('DB_MASTER', 'M_CALENDAR'));
+    invalidate_('DB_WORK', 'T_CASE');
+    var c = findCase_(created.case_id);   // 저장된 행(행 번호 포함)을 다시 읽어 책임자 지정
+    c.owner_id = user.user_id; c.row_version = Number(c.row_version) + 1; c.updated_at = nowStr_(); c.updated_by = user.user_id;
+    writeObject_('DB_WORK', 'T_CASE', c);
     return { existing: false, caseRow: stripInternal_(c) };
   });
 }

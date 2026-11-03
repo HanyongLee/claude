@@ -31,6 +31,7 @@ function createGas(opts) {
       getFolders: () => iter([...folders.values()].filter(x => x.parentId === f.id && !x.trashed).map(wrapFolder)),
       getFoldersByName: (n) => iter([...folders.values()].filter(x => x.parentId === f.id && x.name === n && !x.trashed).map(wrapFolder)),
       getFiles: () => iter([...files.values()].filter(x => x.parentId === f.id && !x.trashed).map(wrapFile)),
+      getFilesByName: (n) => iter([...files.values()].filter(x => x.parentId === f.id && x.name === n && !x.trashed).map(wrapFile)),
       createFile: (a, b, mime) => {
         let name, bytes, m;
         if (typeof a === 'string') { name = a; bytes = Buffer.from(b, 'utf8'); m = mime; }
@@ -66,6 +67,7 @@ function createGas(opts) {
   const rootFolder = makeFolder('내 드라이브', null);
   const DriveApp = {
     getRootFolder: () => rootFolder,
+    getFoldersByName: (n) => iter([...folders.values()].filter(x => x.name === n && !x.trashed).map(wrapFolder)),
     createFolder: (n) => rootFolder.createFolder(n),
     getFolderById: (id) => { const f = folders.get(id); if (!f || f.trashed) throw new Error('No folder ' + id); return wrapFolder(f); },
     getFileById: (id) => { const f = files.get(id); if (!f) throw new Error('No file ' + id); return wrapFile(f); }
@@ -200,6 +202,7 @@ function createGas(opts) {
     getProjectTriggers: () => triggers.slice(),
     deleteTrigger: (tr) => { const i = triggers.indexOf(tr); if (i >= 0) triggers.splice(i, 1); }
   };
+  const HtmlService = { createHtmlOutputFromFile: (name) => ({ getContent: () => require('fs').readFileSync(require('path').join(opts.gasDir || __dirname + '/../gas', name + '.html'), 'utf8') }) };
   const logs = [];
   const Logger = { log: (m) => { logs.push(String(m)); } };
   const MimeType = { CSV: 'text/csv' };
@@ -209,7 +212,7 @@ function createGas(opts) {
 
   return {
     globals: { SpreadsheetApp, DriveApp, Utilities, PropertiesService, LockService, Session, ScriptApp, Logger, MimeType, MailApp, UrlFetchApp,
-      HtmlService: {}, console: { log() {}, error: (e) => logs.push('ERR ' + e) } },
+      HtmlService, console: { log() {}, error: (e) => logs.push('ERR ' + e) } },
     state, files, folders, triggers, logs, props, mails, lockRelease: () => { lockHeld = false; }
   };
 }

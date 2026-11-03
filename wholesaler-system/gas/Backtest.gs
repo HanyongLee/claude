@@ -40,6 +40,7 @@ function continueBacktest_(timeBudgetMs, trigger) {
   if (!runId) return { status: '없음' };
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(5000)) return { status: '건너뜀' };
+  markLocked_(true);
   var t0 = Date.now(), started = nowStr_();
   try {
     invalidate_('DB_AGG', 'A_BACKTEST_RUN');
@@ -102,6 +103,7 @@ function continueBacktest_(timeBudgetMs, trigger) {
     } catch (ignore) { /* 기록 실패가 원래 오류를 가리지 않도록 */ }
     throw e;
   } finally {
+    markLocked_(false);
     lock.releaseLock();
   }
 }

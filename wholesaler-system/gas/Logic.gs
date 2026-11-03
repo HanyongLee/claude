@@ -167,7 +167,7 @@ function validateRow_(source, o, ctx) {
     if (!isYmd_(o.txn_date)) return ['BAD_DATE', '거래일 형식 오류: ' + o.txn_date];
     if (APP.CATEGORIES.indexOf(o.category) < 0) return ['BAD_CATEGORY', '부류 오류: ' + o.category];
     if (!num(o.amount)) return ['BAD_AMOUNT', '금액 오류: ' + o.amount];
-    if (['현금', '외상'].indexOf(o.txn_type) < 0) return ['BAD_TXN_TYPE', '거래구분 오류(현금/외상): ' + o.txn_type];
+    if (['현금', '외상', '미구분'].indexOf(o.txn_type) < 0) return ['BAD_TXN_TYPE', '거래구분 오류(현금/외상/미구분): ' + o.txn_type];
     var ct = o.correction_type || '정상';
     if (['정상', '반품', '취소', '정정'].indexOf(ct) < 0) return ['BAD_CORRECTION', '정정구분 오류: ' + ct];
     if (ct === '정상' && Number(o.amount) < 0) return ['NEGATIVE_AMOUNT', '정상 거래의 음수 금액'];
@@ -241,11 +241,11 @@ function buildAggregates_(p) {
 
   // 판매: 일 집계는 전기일, 월 집계는 원거래일 귀속
   p.sales.forEach(function (s) {
-    var amt = Number(s.amount), credit = s.txn_type === '외상';
+    var amt = Number(s.amount), credit = s.txn_type === '외상', cash = s.txn_type === '현금';   // 미구분은 구매금액에만 반영
     [s.category, ALL].forEach(function (c) {
       var r = drow(s.wholesaler_id, s.txn_date, c);
       r.purchase_amount += amt;
-      if (credit) r.credit_sales += amt; else r.cash_sales += amt;
+      if (credit) r.credit_sales += amt; else if (cash) r.cash_sales += amt;
       if (s.correction_type !== '정상') r.correction_amount += amt;
     });
     var attr = s.txn_date;
@@ -257,9 +257,18 @@ function buildAggregates_(p) {
     [s.category, ALL].forEach(function (c) {
       var m = mrow(s.wholesaler_id, ymOf_(attr), c);
       m.purchase_amount += amt;
-      if (credit) m.credit_sales += amt; else m.cash_sales += amt;
+      if (credit) m.credit_sales += amt; else if (cash) m.cash_sales += amt;
       if (s.correction_type === '정상' && amt > 0) m._days[s.txn_date] = true;
     });
+  });
+
+  // 월 합계만 있는 달(농협 월별 사업실적): 그 달에 일별 자료가 없을 때만 전체 부류 월 집계로 쓴다
+  (p.salesMonthly || []).forEach(function (r) {
+    var has = Object.keys(monthly).some(function (k) { return k.indexOf(r.wholesaler_id + '|' + r.ym + '|') === 0; });
+    if (has) return;
+    var m = mrow(r.wholesaler_id, r.ym, ALL);
+    m.purchase_amount += Number(r.amount) || 0;
+    m.avg_method = 'MONTHLY_ONLY';   // 구매일수·부류별 구성비 산출 불가 표시
   });
 
   // 입금: 반영일 기준
@@ -340,7 +349,7 @@ function buildAggregates_(p) {
   ar.forEach(function (a) { arDaily[a.wholesaler_id + '|' + a.base_date] = Number(a.balance); });
   Object.keys(monthly).forEach(function (k) {
     var m = monthly[k];
-    m.purchase_days = Object.keys(m._days).length;
+    m.purchase_days = m.avg_method === 'MONTHLY_ONLY' ? '' : Object.keys(m._days).length;
     m.auction_days = auctionDaysByYm[m.ym] || 0;
     delete m._days;
   });
@@ -422,7 +431,8 @@ function reconcile_(p, agg) {
   Object.keys(rawSales).sort().forEach(function (ym) { push('판매금액(전기월)', ym, rawSales[ym], aggSales[ym] || 0); });
 
   // 판매 총액: 원천 ↔ 월 집계(원거래월 귀속이라 월별은 다를 수 있으나 총액은 같아야 함)
-  var rawTotal = p.sales.reduce(function (s, r) { return s + Number(r.amount); }, 0);
+  var rawTotal = p.sales.reduce(function (s, r) { return s + Number(r.amount); }, 0) +
+    (p.salesMonthly || []).reduce(function (s, r) { return s + (agg.monthly.some(function (m) { return m.wholesaler_id === r.wholesaler_id && m.ym === r.ym && m.avg_method === 'MONTHLY_ONLY'; }) ? Number(r.amount) : 0); }, 0);
   var monTotal = agg.monthly.filter(function (r) { return r.category === ALL; })
     .reduce(function (s, r) { return s + r.purchase_amount; }, 0);
   push('판매금액 총액(월집계)', '전체', rawTotal, monTotal, '월 집계는 반품·취소를 원거래월로 귀속');
@@ -430,7 +440,7 @@ function reconcile_(p, agg) {
   // 부류 합 = 전체 (월 집계)
   var catSum = sumBy(agg.monthly.filter(function (r) { return r.category !== ALL; }),
     function (r) { return r.ym; }, function (r) { return r.purchase_amount; });
-  var allSum = sumBy(agg.monthly.filter(function (r) { return r.category === ALL; }),
+  var allSum = sumBy(agg.monthly.filter(function (r) { return r.category === ALL && r.avg_method !== 'MONTHLY_ONLY'; }),   // 월 합계만 있는 달은 부류 구분이 없어 제외
     function (r) { return r.ym; }, function (r) { return r.purchase_amount; });
   var badCat = Object.keys(allSum).filter(function (ym) { return Math.abs((catSum[ym] || 0) - allSum[ym]) >= 0.5; });
   push('부류합계=전체(월)', '전체', Object.keys(allSum).length, Object.keys(allSum).length - badCat.length,

@@ -317,7 +317,10 @@ var SETTING_CHOICES = {
   AI_ENABLED: ['예', '아니오'],
   AI_ORG_APPROVED: ['미확인', '예', '아니오'],
   AI_DATA_SCOPE: ['매뉴얼본문만', '매뉴얼+익명수치'],
-  AUTH_MODE: ['google', 'code']
+  AUTH_MODE: ['google', 'code'],
+  NH_AUTO_REGISTER_WS: ['예', '아니오'],
+  SNAPSHOT_ENABLED: ['예', '아니오'],
+  SNAPSHOT_EMAIL: ['예', '아니오']
 };
 var SETTING_FREE_TEXT = ['LIMIT_BASE_AMOUNT', 'APPROVER_ROLE', 'MATRIX_Y_FIXED_SOURCE', 'AI_PROVIDER_NOTE'];
 
