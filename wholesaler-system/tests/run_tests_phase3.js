@@ -8,7 +8,7 @@ const { createGas } = require('./gas_mock');
 const GAS = path.join(__dirname, '..', 'gas');
 const ORDER = ['Config.gs', 'Logic.gs', 'Db.gs', 'Audit.gs', 'Auth.gs', 'Setup.gs', 'Pipeline.gs', 'Backup.gs',
   'Master.gs', 'Metrics.gs', 'Signals.gs', 'Work.gs', 'Docs.gs', 'Performance.gs', 'Backtest.gs', 'Qa.gs', 'Notify.gs', 'Api.gs', 'VirtualData.gs', 'TestData.gs', 'Main.gs', 'Install.gs', 'NhImport.gs', 'Snapshot.gs', 'Checklist.gs'];
-const OWNER = 'owner@example.invalid', START = '2024-10-01', END = '2026-10-27';
+const OWNER = 'owner@example.invalid', START = '2024-09-01', END = '2026-10-27';
 const FROZEN = new Date('2026-10-28T09:00:00+09:00').getTime();
 let tick = 0;
 const REAL0 = Date.now();
@@ -64,6 +64,7 @@ section('거래·회수 매트릭스 (시나리오: 참고용 4분면, 신호에
   // 기본 모드(전년 동월 증감) 확인 후, 아래 기존 검증은 구매금액 모드로 전환해 수행
   const g = run(ctx, 'api_matrix("전체")').data;
   ok(g.xMode === '전년동월증감' && g.boundaries.x === 0 && g.points.every(p => typeof p.x === 'number' && p.prevYearMonth !== undefined), '기본 가로축 = 마감 월 실적의 전년 동월 대비 증감률, 경계 0%', `${g.points.length}점, 제외 ${g.excluded.length}`);
+  ok(g.points.every(p => p.prev && p.prev.ym === '2025-09') && g.points.filter(p => p.prev.available).length > 0 && g.points.every(p => !p.prev.available || (typeof p.prev.x === 'number' && typeof p.prev.y === 'number')), '점마다 전년 동월 위치(전전년 대비 증감률·당시 회전율·실적) 제공', `${g.points.filter(p => p.prev.available).length}/${g.points.length}점 전년 위치 있음`);
   ok(g.points.every(p => p.quadrant === (p.x >= 0 ? (p.y >= g.boundaries.y ? 'HH' : 'HL') : (p.y >= g.boundaries.y ? 'LH' : 'LL'))), '분류 = (실적 증가/감소) × (회전율 높음/낮음)');
   run(ctx, `api_updateSetting('MATRIX_X_MODE', '당기중앙값', true, '', '테스트')`);
   const m = run(ctx, 'api_matrix("전체")').data;

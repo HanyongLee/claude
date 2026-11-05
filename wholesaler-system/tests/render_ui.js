@@ -25,7 +25,7 @@ const OWNER = 'owner@example.invalid';
 class FrozenDate extends Date { constructor(...a) { if (!a.length) super(FROZEN + (Date.now() - REAL0)); else super(...a); } static now() { return FROZEN + (Date.now() - REAL0); } }
   const ctx = vm.createContext(Object.assign({ Date: FrozenDate }, gas.globals));
   vm.runInContext(ORDER.map(f => fs.readFileSync(path.join(GAS, f), 'utf8')).join('\n;\n'), ctx);
-  vm.runInContext(`setupSystem(); loadVirtualData_({ startDate: '2024-10-01', endDate: '2026-10-27', seed: 20261027 }); runPipeline_('UI');`, ctx);
+  vm.runInContext(`setupSystem(); loadVirtualData_({ startDate: '2024-09-01', endDate: '2026-10-27', seed: 20261027 }); runPipeline_('UI');`, ctx);
 
   // 관리 건 하나를 조치 진행 상태까지 만들어 화면을 채운다
   const caseId = vm.runInContext(`(function(){
@@ -73,6 +73,21 @@ class FrozenDate extends Date { constructor(...a) { if (!a.length) super(FROZEN 
         await page.waitForTimeout(600);
         if (name === 'qa') { await page.fill('#qf input[name=q]', '연체 발생 시 결제계획 확인 절차'); await page.click('#qf button'); await page.waitForTimeout(800); await page.screenshot({ path: path.join(OUT, `${who.tag}-qa-answer-${scheme}.png`), fullPage: true }); }
         if (name === 'perf') { await page.click('#pTabs button[data-t="matrix"]'); await page.waitForTimeout(800); await page.screenshot({ path: path.join(OUT, `${who.tag}-matrix-${scheme}.png`), fullPage: true }); await page.click('#pTabs button[data-t="collect"]'); await page.waitForTimeout(500); }
+        if (name === 'home' && scheme === 'light') {
+          // 4분면: 원 하나를 누르면 전년 동월 위치가 점선 원으로 나타나고, 다시 누르면 사라진다
+          const pt = await page.$('svg g.pt[data-ws]');
+          if (!pt) errors.push(who.tag + ' 홈 4분면에 중도매인 원이 없음');
+          else {
+            const ws = await pt.getAttribute('data-ws');
+            await page.evaluate(w => document.querySelector(`svg g.pt[data-ws="${w}"] circle`).dispatchEvent(new MouseEvent('click', { bubbles: true })), ws); await page.waitForTimeout(200);
+            const shown = await page.evaluate(w => { const g = document.querySelector(`svg g.prev[data-prev="${w}"]`); return !!g && getComputedStyle(g).display !== 'none' && g.getAttribute('visibility') !== 'hidden'; }, ws);
+            if (!shown) errors.push(who.tag + ' 원 클릭 후 전년 동월 점선 원이 보이지 않음: ' + ws);
+            await page.screenshot({ path: path.join(OUT, `${who.tag}-home-prev-${scheme}.png`), fullPage: false });
+            await page.evaluate(w => document.querySelector(`svg g.pt[data-ws="${w}"] circle`).dispatchEvent(new MouseEvent('click', { bubbles: true })), ws); await page.waitForTimeout(200);
+            const hidden = await page.evaluate(w => { const g = document.querySelector(`svg g.prev[data-prev="${w}"]`); return !g || getComputedStyle(g).display === 'none' || g.getAttribute('visibility') === 'hidden'; }, ws);
+            if (!hidden) errors.push(who.tag + ' 다시 클릭해도 점선 원이 사라지지 않음: ' + ws);
+          }
+        }
         await page.screenshot({ path: path.join(OUT, `${who.tag}-${name}-${scheme}.png`), fullPage: true });
         const bad = await page.evaluate(() => Array.from(document.querySelectorAll('.note.bad')).map(n => n.textContent).join(' | '));
         if (/접속할 수 없습니다|is not|undefined/.test(bad)) errors.push(who.tag + ' ' + name + ': ' + bad);

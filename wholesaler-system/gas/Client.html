@@ -173,7 +173,7 @@ function pageChecklist(caseId) {
     var f = document.getElementById('ckf');
     if (f) {
       var weights = {}; ck.items.forEach(function (it) { weights[it.item_id] = it.weight; });
-      var score = function () { var yes = 0; ck.items.forEach(function (it) { var v = f.querySelector('input[name="a_' + it.item_id + '"]:checked'); if (v && v.value === '예') yes += it.weight; }); document.getElementById('ckScore').textContent = '체크 점수(가중) ' + yes + ' — 제안: ' + (yes >= 3 ? '연체 가능성 높음' : yes > 0 ? '보통' : '낮음') + ' (가정값 기준, 결과 분류는 담당자가 결정)'; };
+      var score = function () { var yes = 0; ck.items.forEach(function (it) { var v = f.querySelector('input[name="a_' + it.item_id + '"]:checked'); if (v && v.value === '예') yes += it.weight; }); document.getElementById('ckScore').textContent = '체크 점수(가중) ' + yes + ' — 제안: ' + (yes >= 4 ? '연체 가능성 높음' : yes > 0 ? '보통' : '낮음') + ' (가정값 4점 기준, 결과 분류는 담당자가 결정)'; };
       f.addEventListener('change', score); score();
       f.onsubmit = function (e) {
         e.preventDefault(); var o = formData(f); o.case_id = caseId; o.answers = {}; o.remarks = {};

@@ -205,17 +205,17 @@ section('매뉴얼 폴더 자동 등록 (실제 파일명 규칙, 내용은 읽�
 section('주간 요약 화면·이상징후 체크리스트·주간 스냅샷 주기');
 {
   const sm = run(ctx, 'api_summary()').data;
-  ok(sm.kpis && sm.flagged.length >= 1 && sm.matrix.quadrants && sm.guides.length === 9 && sm.checklists.length >= 1 && sm.checklistItems.length === 11, '요약: 징후·동향·조치 3영역 + 4분면 + 조치 안내 + 체크리스트 자료', `징후 ${sm.flagged.length}명, 대기 ${sm.trendWait.length}, 조치 ${sm.openActions.length}`);
+  ok(sm.kpis && sm.flagged.length >= 1 && sm.matrix.quadrants && sm.guides.length === 9 && sm.checklists.length >= 1 && sm.checklistItems.length === 10, '요약: 징후·동향·조치 3영역 + 4분면 + 조치 안내 + 체크리스트 자료', `징후 ${sm.flagged.length}명, 대기 ${sm.trendWait.length}, 조치 ${sm.openActions.length}`);
   const f6 = sm.flagged.find(x => x.wholesaler_id === '6');
   ok(f6 && f6.signals.some(s => s.rule_id === 'S06') && f6.guides.some(g => g.situation_code === 'SIT-COLL-EXPIRY'), '징후 행에 해당 상황의 조치 안내(확인 필요 또는 1줄+조항)가 붙음', f6 && f6.guides.map(g => g.label + ':' + g.status).join(', '));
   const ckCase = sm.checklists[0];
   const items = ckCase.items;
-  ok(items.every(i => i.is_assumed) && items.some(i => i.category === '결제'), '체크리스트 11개 항목은 모두 "가정" 표시');
-  const answers = {}; items.forEach(i => { answers[i.item_id] = '아니오'; }); answers[items[2].item_id] = '예'; answers[items[7].item_id] = '예'; answers[items[9].item_id] = '미확인';
+  ok(items.length === 10 && items.every(i => i.is_assumed) && items.some(i => i.category === '인력'), '체크리스트 10개 항목(인력·결제·거래·현장·대표자·신용·자금·관계), 모두 "가정" 표시');
+  const answers = {}; items.forEach(i => { answers[i.item_id] = '아니오'; }); answers[items[0].item_id] = '예'; answers[items[1].item_id] = '예'; answers[items[9].item_id] = '미확인';
   const bad = run(ctx, `api_saveChecklist({ case_id: ${J(ckCase.case_id)}, checked_date: '2026-10-28', answers: ${J(answers)}, recheck_date: '2026-11-30' })`);
   ok(!bad.ok && /결과 분류/.test(bad.error), '결과 분류 없이 저장 → 거부(담당자 판단 필수)');
-  const sv = run(ctx, `api_saveChecklist({ case_id: ${J(ckCase.case_id)}, checked_date: '2026-10-28', checker_name: '(가상)경매사A', by_paper: true, answers: ${J(answers)}, remarks: { ${J(items[2].item_id)}: '(가상) 11/15 결제 약속' }, result_class: '채권 검토 필요', recheck_date: '2026-11-30' })`);
-  ok(sv.ok && sv.data.score.yes === 4 && sv.data.score.level === '높음', '가중 점수(결제 2 + 대표자 2 = 4) → 제안 "높음"(가정값 3 이상)', JSON.stringify(sv.data.score));
+  const sv = run(ctx, `api_saveChecklist({ case_id: ${J(ckCase.case_id)}, checked_date: '2026-10-28', checker_name: '(가상)경매사A', by_paper: true, answers: ${J(answers)}, remarks: { ${J(items[1].item_id)}: '(가상) 11/15 결제 약속' }, result_class: '채권 검토 필요', recheck_date: '2026-11-30' })`);
+  ok(sv.ok && sv.data.score.yes === 4 && sv.data.score.level === '높음', '가중 점수(인력 2 + 결제 2 = 4) → 제안 "높음"(가정값 4 이상)', JSON.stringify(sv.data.score));
   const tr = table(ctx, 'DB_WORK', 'T_TREND').find(t => t.report_id === sv.data.report.report_id);
   const facts = JSON.parse(tr.facts_json);
   ok(tr.check_method === '현장 체크리스트(서면)' && facts.length === 2 && facts.every(f => /→ 예/.test(f.text)) && tr.further_checks.indexOf(items[9].text) >= 0 && /서면 체크리스트/.test(tr.official_source), '"예" 항목만 확인된 사실로, "미확인"은 추가 확인사항으로 기록', facts[0].text.substring(0, 50));

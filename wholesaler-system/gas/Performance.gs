@@ -141,6 +141,23 @@ function matrix_(user, category) {
       lastMonth: c.lastMonth.amount, prevYearMonth: c.lastMonth.prevAmount, growth: c.lastMonth.yoy, balance: r.balance, collectionDays: r.collectionDays, overdue: r.overdue };
     if (reason) { pt.reason = reason; excluded.push(pt); } else included.push(pt);
   });
+  // 전년 동월 위치(점선 원): 가로 = 전년 동월의 전전년 대비 증감률, 세로 = 전년 동월 말 기준 회전율, 크기 = 전년 동월 실적
+  if (xMode === '전년동월증감' && included.length) {
+    var monthly = readTable_('DB_AGG', 'A_MONTHLY'), daily = readTable_('DB_AGG', 'A_DAILY'), calendar = readTable_('DB_MASTER', 'M_CALENDAR');
+    var idx = monthlyIndex_(monthly), balIdx = balanceIndex_(daily), dailyByWs = indexDailyByWs_(daily);
+    var wsAll = {}; readTable_('DB_MASTER', 'M_WHOLESALER').forEach(function (w) { wsAll[w.wholesaler_id] = w; });
+    var prevYm = addMonths_(sum.meta.lastCompleteYm, -12), prev2Ym = addMonths_(sum.meta.lastCompleteYm, -24);
+    var prevEnd = lastAuctionDayOfMonth_(calendar, prevYm);
+    included.forEach(function (p) {
+      var m1 = idx[p.wholesaler_id + '|' + prevYm + '|' + category], m2 = idx[p.wholesaler_id + '|' + prev2Ym + '|' + category];
+      var g = growthRate_(m1 ? m1.purchase_amount : 0, m2 ? m2.purchase_amount : null);
+      var w = wsAll[p.wholesaler_id] || {};
+      var mt = computeMetrics_({ ws: p.wholesaler_id, baseDate: prevEnd, daily: dailyByWs[p.wholesaler_id] || [], monthly: monthly, calendar: calendar, limits: [], balByDate: balIdx[p.wholesaler_id] || {}, tradeStart: w.trade_start_date, settings: settings, marketGrowth: null });
+      var t = mt.byName['회전율|' + APP.ALL];
+      p.prev = { ym: prevYm, x: g.status === '정상' ? g.value * 100 : null, y: t && t.status === '정상' ? Number(t.value) : null, size: m1 ? m1.purchase_amount : 0,
+        available: g.status === '정상' && !!(t && t.status === '정상'), reason: g.status !== '정상' ? '전전년 실적 없음' : (!t || t.status !== '정상' ? '전년 회전율 산출불가' : '') };
+    });
+  }
   var bx = xMode === '전년동월증감' ? 0 : median_(included.map(function (p) { return p.x; }));
   var yMode = settings.MATRIX_Y_MODE || '당기중앙값', yFixed = settingNum_(settings, 'MATRIX_Y_FIXED', NaN);
   var by, ySource;
