@@ -32,7 +32,18 @@ var INSTALL_MANIFEST = JSON.stringify({
 
 function installRawUrl_(name) {
   var s = INSTALL_SOURCE;
-  return 'https://raw.githubusercontent.com/' + s.owner + '/' + s.repo + '/' + s.branch + '/' + s.dir + '/' + name;
+  // 버전 고정: 스크립트 속성 INSTALL_REF 에 태그(예: v0.7.0)를 넣으면 update 가 그 버전을 받는다. 비우면 개발 브랜치 최신.
+  var ref = PropertiesService.getScriptProperties().getProperty('INSTALL_REF') || s.branch;
+  return 'https://raw.githubusercontent.com/' + s.owner + '/' + s.repo + '/' + encodeURIComponent(ref) + '/' + s.dir + '/' + name;
+}
+
+/** [편집기 실행] update 가 받을 버전을 태그로 고정한다. 예: setUpdateRef('v0.7.0'). 빈 값이면 브랜치 최신으로 복귀 */
+function setUpdateRef(ref) {
+  var p = PropertiesService.getScriptProperties();
+  if (ref) p.setProperty('INSTALL_REF', String(ref)); else p.deleteProperty('INSTALL_REF');
+  var now = p.getProperty('INSTALL_REF');
+  Logger.log('update 대상: ' + (now || INSTALL_SOURCE.branch + ' (브랜치 최신)'));
+  return now || '';
 }
 
 /** [편집기 실행] GitHub 에서 전체 파일을 받아 이 프로젝트에 설치한다 */
