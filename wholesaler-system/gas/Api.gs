@@ -608,3 +608,7 @@ function api_logout() {
 function api_issueAccessCode(userId, reason) {
   return apiCall_('user.manage', function (admin) { return issueAccessCode_(admin, userId, reason); });
 }
+
+function api_registerManualFolder(folderIdOrName) {
+  return apiCall_('docs.manage', function (user) { var r = registerManualFolder_(user, folderIdOrName); var s = seedSituations_(user); return { registered: r, situations: s }; });
+}

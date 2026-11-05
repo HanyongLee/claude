@@ -46,9 +46,100 @@ function proceduresFor_(situationCode, asOf) {
     });
   var docIds = {}; steps.forEach(function (s) { docIds[s.doc_id] = true; });
   var conflict = Object.keys(docIds).length > 1;
-  return { situation_code: situationCode, steps: steps, status: steps.length ? (conflict ? '충돌' : '정상') : '확인 필요',
+  // 절차가 아직 없을 때: 상황에 연결된 "근거 후보 문서"(M_SITUATION.note 의 doc:ID 목록)를 보여 준다. 절차 내용은 만들지 않는다
+  var candidates = [];
+  if (!steps.length) {
+    var sit = readTable_('DB_MASTER', 'M_SITUATION').filter(function (x) { return x.situation_code === situationCode; })[0];
+    ((sit && sit.note) || '').split(/[;,\s]+/).forEach(function (tok) {
+      var m = tok.match(/^doc:(.+)$/); if (!m) return;
+      var d = docs[m[1]]; var v = vers.filter(function (x) { return x.doc_id === m[1]; }).sort(function (a, b) { return a.effective_from < b.effective_from ? 1 : -1; })[0];
+      if (d) candidates.push({ doc_id: d.doc_id, doc_name: d.doc_name, version: v ? v.version : '', file_id: v ? v.file_id : '' });
+    });
+  }
+  return { situation_code: situationCode, steps: steps, candidates: candidates, status: steps.length ? (conflict ? '충돌' : '정상') : '확인 필요',
     message: steps.length ? (conflict ? '같은 상황에 서로 다른 문서의 절차가 등록되어 있습니다. 문서 담당자 확인 전까지 우선순위를 정하지 않습니다.' : '')
-      : '등록된 근거 문서·절차가 없습니다. 절차를 임의로 만들지 않습니다. 문서 담당자에게 등록을 요청하세요.' };
+      : (candidates.length ? '절차(조항·쪽수)가 아직 등록되지 않았습니다. 아래 근거 후보 문서를 열어 해당 조항을 확인한 뒤 "절차 단계 등록"으로 입력하세요. 절차를 임의로 만들지 않습니다.'
+        : '등록된 근거 문서·절차가 없습니다. 절차를 임의로 만들지 않습니다. 문서 담당자에게 등록을 요청하세요.') };
+}
+
+/* ───────────── 매뉴얼 폴더 자동 등록 ───────────── */
+
+/** 파일명 → 문서명·버전·시행일. "(2023.12.29 개정)" 이 있으면 그 날짜가 시행일, 없으면 시행일 미확인 */
+function parseManualName_(fileName) {
+  var base = String(fileName).replace(/\.(hwpx?|pdf|docx?|txt)$/i, '').replace(/의 사본$/, '').trim();
+  var m = base.match(/\((\d{4})[.\-](\d{1,2})[.\-](\d{1,2})\s*개정\)/);
+  var name = base.replace(/\s*\(\d{4}[.\-]\d{1,2}[.\-]\d{1,2}\s*개정\)/, '').trim();
+  var eff = m ? m[1] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2) : '';
+  return { doc_name: name, version: eff ? 'v' + eff.replace(/-/g, '.') : 'v1', effective_from: eff, doc_id: 'DOC-' + fnv1a_(name).toUpperCase(),
+    doc_type: /서식|양식|신청서|확인서|요청서/.test(name) ? '서식' : '매뉴얼', family: name.split(/[_\s]/)[0] };
+}
+
+/**
+ * 폴더의 문서 파일을 모두 문서·버전으로 등록한다(이미 등록된 파일 ID·버전은 건너뜀).
+ * HWP 는 본문을 읽을 수 없으므로 링크·버전만 등록된다. 조항·쪽수는 담당자가 "절차 단계 등록"에서 입력한다.
+ */
+function registerManualFolder_(user, folderIdOrName) {
+  var folder = null;
+  try { folder = DriveApp.getFolderById(folderIdOrName); } catch (e) { folder = null; }
+  if (!folder) { var it0 = DriveApp.getFoldersByName(folderIdOrName); if (!it0.hasNext()) throw new Error('폴더를 찾을 수 없습니다: ' + folderIdOrName); folder = it0.next(); }
+  return withLock_(function () {
+    invalidate_('DB_MASTER', 'M_DOC'); invalidate_('DB_MASTER', 'M_DOC_VER');
+    var docs = {}; readTable_('DB_MASTER', 'M_DOC').forEach(function (d) { docs[d.doc_id] = d; });
+    var vers = readTable_('DB_MASTER', 'M_DOC_VER');
+    var stat = { docs: 0, versions: 0, skipped: 0, noDate: [] , files: [] };
+    var it = folder.getFiles();
+    while (it.hasNext()) {
+      var f = it.next(), name = f.getName();
+      if (!/\.(hwpx?|pdf|docx?|txt)$/i.test(name) && String(f.getMimeType ? f.getMimeType() : '').indexOf('google-apps.document') < 0) continue;
+      var p = parseManualName_(name);
+      if (!docs[p.doc_id]) {
+        var row = { doc_id: p.doc_id, doc_name: p.doc_name, doc_type: p.doc_type, owner_dept: '', note: '폴더 자동 등록(' + folder.getName() + ')' };
+        Object.assign(row, newAuditFields_(user)); appendObjects_('DB_MASTER', 'M_DOC', [row]); docs[p.doc_id] = row; stat.docs++;
+      }
+      if (vers.some(function (v) { return v.doc_id === p.doc_id && (v.file_id === f.getId() || v.version === p.version); })) { stat.skipped++; continue; }
+      var eff = p.effective_from || todayStr_();
+      var prev = vers.filter(function (v) { return v.doc_id === p.doc_id && !v.is_deleted; });
+      prev.forEach(function (v) { if ((v.effective_to || APP.OPEN_END) >= eff && v.effective_from < eff) { v.effective_to = addDays_(eff, -1); writeObject_('DB_MASTER', 'M_DOC_VER', v); } });
+      var vrow = { doc_id: p.doc_id, version: p.version, effective_from: eff, effective_to: APP.OPEN_END, file_id: f.getId(),
+        file_hash: sha256Hex_(f.getBlob().getBytes()), note: p.effective_from ? '파일명의 개정일을 시행일로 등록' : '시행일 미확인(파일명에 개정일 없음) — 등록일로 임시 설정, 확인 후 수정' };
+      Object.assign(vrow, newAuditFields_(user)); appendObjects_('DB_MASTER', 'M_DOC_VER', [vrow]); vers.push(vrow); stat.versions++;
+      if (!p.effective_from) stat.noDate.push(p.doc_name);
+      stat.files.push({ file: name, doc_id: p.doc_id, doc_name: p.doc_name, version: p.version, effective_from: eff });
+    }
+    audit_(user, 'REGISTER_MANUALS', 'DB_MASTER', 'M_DOC', folder.getName(), null, { docs: stat.docs, versions: stat.versions, skipped: stat.skipped }, '매뉴얼 폴더 자동 등록');
+    return stat;
+  });
+}
+
+/**
+ * 상황 코드 기본 세트와 "근거 후보 문서" 연결. 절차 내용은 만들지 않는다.
+ * 후보 문서는 등록된 문서명에서 키워드로 찾는다(편·장 제목 기준). 조항·쪽수는 담당자가 입력.
+ */
+var SITUATION_SEED = [
+  { code: 'SIT-OVD-NEW', label: '연체 발생(채권 검토 필요)', cond: { signals: ['S03'], result_class: '채권 검토 필요' }, keywords: ['임의회수', '여신관리', '총칙'] },
+  { code: 'SIT-OVD-30', label: '연체 30일 이상 장기화', cond: { signals: ['S03'], min_overdue_days: 30 }, keywords: ['임의회수', '집행보전조치', '지급명령', '부실위험조사'] },
+  { code: 'SIT-OVD-90', label: '연체 90일 이상·부실 우려', cond: { signals: ['S03'], min_overdue_days: 90 }, keywords: ['강제집행', '담보권 실행', '부실채권정리', '부실위험조사'] },
+  { code: 'SIT-TURN-DROP', label: '회전율 저하 확인', cond: { signals: ['S01'] }, keywords: ['여신관리', '부실위험조사'] },
+  { code: 'SIT-AR-UP', label: '미수금 증가', cond: { signals: ['S02'] }, keywords: ['여신관리'] },
+  { code: 'SIT-BUY-DROP', label: '구매실적 급감', cond: { signals: ['S04'] }, keywords: ['여신관리', '부실위험조사'] },
+  { code: 'SIT-LIMIT-HIGH', label: '한도 사용률 상승', cond: { signals: ['S05'] }, keywords: ['여신관리', '신용조사', '총칙'] },
+  { code: 'SIT-COLL-EXPIRY', label: '담보·보증 기한 도래', cond: { signals: ['S06'] }, keywords: ['담보취득', '담보물', '감정평가'] },
+  { code: 'SIT-MULTI', label: '복수 징후 동시 발생', cond: { signals: ['S07'] }, keywords: ['부실위험조사', '여신관리'] }
+];
+
+function seedSituations_(user) {
+  invalidate_('DB_MASTER', 'M_SITUATION');
+  var have = {}; readTable_('DB_MASTER', 'M_SITUATION').forEach(function (s) { have[s.situation_code] = s; });
+  var docs = readTable_('DB_MASTER', 'M_DOC').filter(function (d) { return !d.is_deleted && d.doc_type === '매뉴얼'; });
+  var out = { created: 0, updated: 0 };
+  SITUATION_SEED.forEach(function (s) {
+    var cands = docs.filter(function (d) { return s.keywords.some(function (k) { return d.doc_name.indexOf(k) >= 0; }); }).map(function (d) { return 'doc:' + d.doc_id; });
+    var note = (cands.length ? '근거 후보 ' + cands.join(' ') : '근거 후보 없음') + ' — 조항·쪽수는 담당자 확인 후 절차 단계로 등록';
+    var cur = have[s.code];
+    if (!cur) { registerSituation_(user, { situation_code: s.code, label: s.label, condition_json: s.cond, note: note }, '상황 코드 기본 세트'); out.created++; }
+    else if (cur.note !== note && !/^(가상)/.test(cur.note || '')) { registerSituation_(user, { situation_code: s.code, label: cur.label, condition_json: cur.condition_json, note: note }, '근거 후보 갱신'); out.updated++; }
+  });
+  return out;
 }
 
 /**

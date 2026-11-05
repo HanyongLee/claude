@@ -196,3 +196,18 @@ function setupWithFolder(folderIdOrName) {
   Logger.log(r.join('\n'));
   return r;
 }
+
+/**
+ * [편집기 실행] 매뉴얼 폴더(HWP·PDF·Google 문서)를 문서·버전으로 등록하고, 상황 코드 기본 세트에 근거 후보 문서를 연결한다.
+ * 예: registerManuals('기초 자료')
+ */
+function registerManuals(folderIdOrName) {
+  requireOwner_();
+  var user = ownerAsUser_();
+  var r = registerManualFolder_(user, folderIdOrName);
+  var s = seedSituations_(user);
+  var msg = '문서 ' + r.docs + '건 / 버전 ' + r.versions + '건 등록, 건너뜀 ' + r.skipped + ' / 상황 코드 생성 ' + s.created + ' 갱신 ' + s.updated +
+    (r.noDate.length ? '\n시행일 미확인(파일명에 개정일 없음): ' + r.noDate.join(', ') : '');
+  Logger.log(msg);
+  return { message: msg, files: r.files };
+}

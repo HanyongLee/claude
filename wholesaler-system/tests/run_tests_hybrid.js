@@ -172,6 +172,35 @@ section('동향보고 파일 제출 → 적재 (오프라인 흐름)');
   ok(fs.statSync(path.join(__dirname, '..', 'docs', '샘플_스냅샷_전체.html')).size > 20000, '문서용 샘플 스냅샷 저장(가상 자료)');
 }
 
+/* ───── 3b. 매뉴얼 폴더 자동 등록 (HWP 파일명 규칙) ───── */
+section('매뉴얼 폴더 자동 등록 (실제 파일명 규칙, 내용은 읽지 않음)');
+{
+  const names = ['(가상)업무방법A_1 목차.hwp', '(가상)업무방법A_1편 총칙(2023.12.29 개정).hwp', '(가상)업무방법A_2편 채권의 임의회수.hwp', '(가상)업무방법A_3편 1장 집행보전조치.hwp',
+    '(가상)업무방법A_3편 4장 담보권 실행.hwp', '(가상)업무방법A_4편 부실채권정리업무(2023.12.29 개정).hwp', '(가상)업무방법B_1_총목차(2022.12.29 개정).hwp',
+    '(가상)업무방법B_2편_2장_담보취득(2023.12.29 개정).hwp', '(가상)업무방법B_2편_3장_담보물_감정평가(2022.12.29 개정).hwp', '(가상)업무방법B_3편_2장_여신관리(2022.12.29 개정).hwp',
+    '(가상)업무방법B_3편_3장_부실위험조사_및_대책(2022.12.29 개정).hwp', '메모.txt'];
+  const fid = run(ctx, `(function(){ var f = DriveApp.getFolderById(${J(rootId)}).createFolder('기초 자료'); return f.getId(); })()`);
+  names.forEach(n => vm.runInContext(`DriveApp.getFolderById(${J(fid)}).createFile(${J(n)}, '(가상 HWP 자리) ' + ${J(n)}, 'application/haansofthwp')`, ctx));
+  const r = run(ctx, `registerManuals('기초 자료')`);
+  const docs = table(ctx, 'DB_MASTER', 'M_DOC'), vers = table(ctx, 'DB_MASTER', 'M_DOC_VER');
+  ok(r.files.length === 12 && docs.length === 12 && vers.length === 12, '폴더의 문서 12개 → 문서·버전 등록', r.message.split('\n')[0]);
+  const v = vers.find(x => docs.find(d => d.doc_id === x.doc_id).doc_name === '(가상)업무방법B_3편_2장_여신관리');
+  ok(v && v.version === 'v2022.12.29' && v.effective_from === '2022-12-29', '"(2022.12.29 개정)" → 버전·시행일', `${v && v.version} 시행 ${v && v.effective_from}`);
+  const nd = vers.find(x => docs.find(d => d.doc_id === x.doc_id).doc_name === '(가상)업무방법A_2편 채권의 임의회수');
+  ok(nd && /시행일 미확인/.test(nd.note) && r.message.indexOf('시행일 미확인') >= 0, '개정일이 없는 파일은 시행일 미확인으로 표시', nd && nd.note);
+  const r2 = run(ctx, `registerManuals('기초 자료')`);
+  ok(table(ctx, 'DB_MASTER', 'M_DOC_VER').length === 12 && /건너뜀 12/.test(r2.message), '다시 실행해도 중복 등록 없음');
+  const sits = table(ctx, 'DB_MASTER', 'M_SITUATION');
+  const s30 = sits.find(x => x.situation_code === 'SIT-OVD-30'), sexp = sits.find(x => x.situation_code === 'SIT-COLL-EXPIRY');
+  ok(sits.length === 9 && /doc:/.test(s30.note) && /doc:/.test(sexp.note), '상황 코드 9개 생성, 편·장 제목 키워드로 근거 후보 문서 연결');
+  const p30 = run(ctx, `proceduresFor_('SIT-OVD-30', todayStr_())`);
+  ok(p30.status === '확인 필요' && p30.steps.length === 0 && p30.candidates.length >= 2 && p30.candidates.some(c => /임의회수|집행보전/.test(c.doc_name)) && /절차를 임의로 만들지 않습니다/.test(p30.message), '절차는 만들지 않고(확인 필요) 근거 후보만 제시', p30.candidates.map(c => c.doc_name).join(' / '));
+  ok(!JSON.stringify(run(ctx, `api_askManual('연체 30일', '')`).data.procedures).includes('"content"') || run(ctx, `api_askManual('연체 30일', '')`).data.status === '확인 필요', '매뉴얼 질의도 조항 미등록 상태에서는 확인 필요로 답함');
+  const reg = run(ctx, `api_registerProcedure({ situation_code: 'SIT-OVD-30', step_no: 1, content: '(가상) 담당자가 입력한 절차', doc_id: ${J(v.doc_id)}, doc_version: 'v2022.12.29', article: '제12조', page: '34' }, '담당자 입력')`);
+  const p30b = run(ctx, `proceduresFor_('SIT-OVD-30', todayStr_())`);
+  ok(reg.ok && p30b.status === '정상' && p30b.steps[0].doc_name === '(가상)업무방법B_3편_2장_여신관리' && p30b.candidates.length === 0, '담당자가 조항·쪽수를 등록하면 정상 절차로 전환');
+}
+
 /* ───── 4. 가상 데이터(미수 포함) 환경에서도 회귀 없음 ───── */
 section('가상 데이터(미수 자료 포함) 환경 회귀');
 {
