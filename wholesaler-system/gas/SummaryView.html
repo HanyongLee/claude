@@ -1,0 +1,202 @@
+<script>
+/* SummaryView.html — 주간 요약 화면 (웹앱 홈과 스냅샷 HTML 이 같은 코드를 쓴다)
+ * 구성: 상단 요약 3장(이상 징후 / 동향보고 / 조치사항) → 4분면 → 탭 3개 상세 → 조치 안내(1줄 + 조항)
+ * opts.web = true 이면 관리 건·중도매인 링크가 웹앱 경로, false 이면 문서 내 앵커 */
+(function (global) {
+  'use strict';
+  function h(v) { return v === null || v === undefined ? '' : String(v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function won(n) { return n === null || n === undefined || n === '' ? '—' : Number(n).toLocaleString('ko-KR') + '원'; }
+  function man(n) { return n === null || n === undefined || n === '' ? '—' : Math.round(Number(n) / 10000).toLocaleString('ko-KR') + '만원'; }
+  function pct(g) { if (!g) return '—'; if (g.status !== '정상') return '<span class="muted">' + h(g.status) + '</span>'; return (g.value > 0 ? '+' : '') + (g.value * 100).toFixed(1) + '%'; }
+  function badge(t) { var cls = { '정상': 'b-ok', '판정보류': 'b-bad', '지연': 'b-warn', '휴업': 'b-warn', '폐업': 'b-bad', '위험': 'b-bad', '경고': 'b-bad', '주의': 'b-warn', '정보': 'b-info', '동향확인중': 'b-warn', '접수': 'b-info', '조치진행': 'b-warn', '승인대기': 'b-warn', '확인완료': 'b-info', '재점검대기': 'b-info', '종결': 'b-ok', '확인 필요': 'b-warn', '충돌': 'b-bad', '보류': 'b-bad', '승인': 'b-ok', '반려': 'b-bad', '완료': 'b-ok', '진행': 'b-warn', '도래': 'b-warn' }[t] || 'b-info'; return '<span class="badge ' + cls + '">' + h(t) + '</span>'; }
+  function table(cols, rows, empty) {
+    if (!rows.length) return '<p class="muted">' + h(empty || '해당 없음') + '</p>';
+    return '<div class="scroll"><table><thead><tr>' + cols.map(function (c) { return '<th class="' + (c.num ? 'num' : '') + '">' + h(c.t) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+      rows.map(function (r) { return '<tr>' + cols.map(function (c) { return '<td class="' + (c.num ? 'num' : '') + (c.wrap ? ' wrap' : '') + '">' + (c.f ? c.f(r) : h(r[c.k])) + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div>';
+  }
+  function ev(s) { var e = s.evidence || {}; switch (s.rule_id) {
+    case 'S01': return '회전율 ' + e.prevTurnover + '→' + e.turnover + '회(' + e.dropPct + '%↓), 회수 ' + e.collectionDays + '일';
+    case 'S02': return '미수 ' + man(e.balance) + ' (3개월 평균의 ' + e.ratio + '배)';
+    case 'S03': return '연체 ' + man(e.overdueAmount) + ' · ' + e.overdueDays + '일 (' + e.stage + ')';
+    case 'S04': return '실적 전년 동월 ' + e.yoyPct + '%, 3개월 ' + e.ma3Pct + '%';
+    case 'S05': return '한도 사용률 ' + e.usagePct + '%';
+    case 'S06': return e.kind + ' 만기 ' + e.date + ' (D-' + e.dday + ')';
+    case 'S07': return '동시 ' + (e.rules || []).join('+');
+    default: return ''; } }
+
+  /** 회전율이 없을 때의 대체 그림: 전년 동월 대비 증감률 가로 막대(감소 상위 N + 증가 상위 n). 막대 하나 = 중도매인 한 명 */
+  function growthRankSvg(gr, link) {
+    var all = gr.points, N = Math.min(15, all.length), M = Math.min(5, Math.max(0, all.length - N));
+    var show = all.slice(0, N).concat(M ? all.slice(all.length - M).filter(function (p) { return p.x > 0; }) : []);
+    var W = 760, L = 150, R = 70, rowH = 22, T = 26, H = T + show.length * rowH + 12;
+    var m = 100;   // 가로 눈금은 ±100% 고정, 그 밖의 값은 끝에 붙이고 수치로만 표시
+    var X = function (v) { return L + (Math.max(-m, Math.min(m, v)) + m) / (2 * m) * (W - L - R); };
+    var svg = '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="전년 동월 대비 증감률 순위">';
+    svg += '<line x1="' + X(0) + '" x2="' + X(0) + '" y1="' + (T - 10) + '" y2="' + (H - 8) + '" stroke="var(--text-2)" stroke-dasharray="4 4"/>';
+    [-m, -m / 2, 0, m / 2, m].forEach(function (v) { svg += '<text class="axis" x="' + X(v) + '" y="' + (T - 12) + '" text-anchor="middle">' + (v > 0 ? '+' : '') + v + '%</text>'; });
+    show.forEach(function (p, i) {
+      var y = T + i * rowH, x = X(p.x), neg = p.x < 0, w = Math.abs(x - X(0));
+      svg += '<g class="pt" data-ws="' + h(p.wholesaler_id) + '"><title>' + h(p.wholesaler_id + ' ' + p.name) + '\n' + gr.ym + ' ' + won(p.lastMonth) + ' / 전년 동월 ' + won(p.prevYearMonth) + '</title>' +
+        '<text class="axis" x="' + (L - 6) + '" y="' + (y + 14) + '" text-anchor="end">' + h(p.wholesaler_id + ' ' + (p.name || '')) + '</text>' +
+        '<rect x="' + (neg ? x : X(0)) + '" y="' + (y + 3) + '" width="' + w + '" height="' + (rowH - 6) + '" rx="3" fill="' + (neg ? (p.x <= -40 ? '#e34948' : '#eda100') : '#1baf7a') + '" fill-opacity="0.8"/>' +
+        '<text class="axis" x="' + (neg ? x - 4 : x + 4) + '" y="' + (y + 14) + '" text-anchor="' + (neg ? 'end' : 'start') + '">' + (p.x > 0 ? '+' : '') + p.x.toFixed(1) + '%</text></g>';
+    });
+    svg += '</svg>';
+    return '<div class="legend"><span><i style="background:#e34948"></i>40% 이상 감소</span><span><i style="background:#eda100"></i>감소</span><span><i style="background:#1baf7a"></i>증가</span><span>' + h(gr.ym) + ' 사업실적 기준 · 감소 ' + gr.decline + '명 / 비교 가능 ' + gr.total + '명 · 감소 상위 ' + N + '명' + (M ? '과 증가 상위' : '') + ' 표시</span></div>' + svg +
+      ((gr.idle || []).length ? '<details><summary class="muted">전년 동월에는 거래가 있었으나 ' + h(gr.ym) + ' 거래가 없는 중도매인 ' + gr.idle.length + '명</summary><p class="muted">' + gr.idle.map(function (p) { return h(p.wholesaler_id + ' ' + (p.name || '')); }).join(', ') + '</p></details>' : '') +
+      '<div class="note">' + h(gr.note) + '</div>';
+  }
+
+  function matrixSvg(mx, link) {
+    var pts = mx.points || [];
+    if (!pts.length && mx.growthRank && mx.growthRank.points.length) return growthRankSvg(mx.growthRank, link);
+    if (!pts.length) return '<p class="muted">분류할 점이 없습니다' + (mx.excluded && mx.excluded.length ? ' (제외 ' + mx.excluded.length + '명: ' + h(mx.excluded[0].reason) + ' 등)' : '') + '.</p>';
+    var W = 760, H = 420, L = 56, R = 16, T = 16, B = 40, growthMode = mx.xMode === '전년동월증감';
+    var xs = pts.map(function (p) { return p.x; }), ys = pts.map(function (p) { return p.y; });
+    var x0, x1, X;
+    if (growthMode) { var m = Math.max(30, Math.ceil(Math.max.apply(null, xs.map(Math.abs)) / 10) * 10); x0 = -m; x1 = m; X = function (v) { return L + (v - x0) / (x1 - x0) * (W - L - R); }; }
+    else { var lx0 = Math.log10(Math.max(1, Math.min.apply(null, xs))) - 0.1, lx1 = Math.log10(Math.max.apply(null, xs)) + 0.1; X = function (v) { return L + (Math.log10(Math.max(v, 1)) - lx0) / (lx1 - lx0) * (W - L - R); }; }
+    var y1 = Math.max.apply(null, ys.concat([mx.boundaries.y || 0])) * 1.15 || 1, Y = function (v) { return T + (1 - v / y1) * (H - T - B); };
+    var smax = Math.max.apply(null, pts.map(function (p) { return p.size || 0; }).concat([1]));
+    var bx = X(mx.boundaries.x), by = Y(mx.boundaries.y);
+    var col = { HH: '#1baf7a', HL: '#e34948', LH: '#2a78d6', LL: '#eda100' };
+    var svg = '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="거래·회수 4분면">';
+    svg += '<line x1="' + bx + '" x2="' + bx + '" y1="' + T + '" y2="' + (H - B) + '" stroke="var(--text-2)" stroke-dasharray="4 4"/><line x1="' + L + '" x2="' + (W - R) + '" y1="' + by + '" y2="' + by + '" stroke="var(--text-2)" stroke-dasharray="4 4"/>';
+    var lab = function (x, y, t, a) { return '<text class="axis" x="' + x + '" y="' + y + '" text-anchor="' + a + '" font-weight="600">' + h(t) + '</text>'; };
+    svg += lab(W - R - 4, T + 14, mx.quadrants.HH.label + ' ' + mx.counts.HH, 'end') + lab(W - R - 4, H - B - 6, mx.quadrants.HL.label + ' ' + mx.counts.HL, 'end') + lab(L + 4, T + 14, mx.quadrants.LH.label + ' ' + mx.counts.LH, 'start') + lab(L + 4, H - B - 6, mx.quadrants.LL.label + ' ' + mx.counts.LL, 'start');
+    if (growthMode) for (var v = x0; v <= x1; v += (x1 - x0) / 6) svg += '<text class="axis" x="' + X(v) + '" y="' + (H - B + 16) + '" text-anchor="middle">' + (v > 0 ? '+' : '') + Math.round(v) + '%</text>';
+    for (var k = 0; k <= 4; k++) { var yv = y1 * k / 4; svg += '<g class="grid"><line x1="' + L + '" x2="' + (W - R) + '" y1="' + Y(yv) + '" y2="' + Y(yv) + '"/></g><text class="axis" x="' + (L - 6) + '" y="' + (Y(yv) + 4) + '" text-anchor="end">' + yv.toFixed(1) + '회</text>'; }
+    svg += '<text class="axis" x="' + ((L + W - R) / 2) + '" y="' + (H - 4) + '" text-anchor="middle">' + h(mx.axes.x) + ' · 경계 ' + h(mx.boundaries.xSource) + '</text>';
+    svg += '<text class="axis" transform="translate(12,' + (H / 2) + ') rotate(-90)" text-anchor="middle">' + h(mx.axes.y) + ' · 경계 ' + (mx.boundaries.y === null ? '—' : mx.boundaries.y.toFixed(2)) + '회</text>';
+    var smaxAll = Math.max.apply(null, pts.map(function (p) { return Math.max(p.size || 0, p.prev && p.prev.size || 0); }).concat([1]));
+    var inRange = function (v) { return growthMode ? Math.max(x0, Math.min(x1, v)) : v; };
+    pts.forEach(function (p) {
+      var r = 5 + 13 * Math.sqrt((p.size || 0) / smaxAll), cx = X(p.x), cy = Y(p.y);
+      var prevSvg = '';
+      if (p.prev && p.prev.available) {
+        var pr = 5 + 13 * Math.sqrt((p.prev.size || 0) / smaxAll), px = X(inRange(p.prev.x)), py = Y(Math.min(p.prev.y, y1));
+        prevSvg = '<g class="prev" data-prev="' + h(p.wholesaler_id) + '" style="display:none"><line x1="' + px + '" y1="' + py + '" x2="' + cx + '" y2="' + cy + '" stroke="' + col[p.quadrant] + '" stroke-dasharray="3 3"/><circle cx="' + px + '" cy="' + py + '" r="' + pr + '" fill="none" stroke="' + col[p.quadrant] + '" stroke-width="2" stroke-dasharray="5 4"/><text class="axis" x="' + (px + pr + 2) + '" y="' + (py - 4) + '">' + h(p.prev.ym) + ' (전년)</text></g>';
+      }
+      svg += prevSvg + '<g class="pt" data-ws="' + h(p.wholesaler_id) + '" style="cursor:pointer"><circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="' + col[p.quadrant] + '" fill-opacity="0.75" stroke="var(--surface)" stroke-width="2"><title>' + h(p.wholesaler_id + ' ' + p.name + ' · ' + p.quadrantLabel) + '\n' + (growthMode ? '전년 동월 대비 ' + p.x.toFixed(1) + '% · 당월 ' + won(p.lastMonth) + (p.prevYearMonth !== null ? ' / 전년 동월 ' + won(p.prevYearMonth) : '') : '12개월 구매 ' + won(p.x)) + '\n회전율 ' + p.y.toFixed(2) + '회 · 미수금 ' + won(p.balance) + (p.prev && p.prev.available ? '\n클릭: 전년 동월 위치(점선) 보기' : (p.prev ? '\n전년 위치 없음: ' + p.prev.reason : '')) + '</title></circle>' +
+        '<text class="axis" x="' + (cx + r + 2) + '" y="' + (cy + 3) + '">' + h(p.wholesaler_id) + '</text></g>';
+    });
+    svg += '</svg>';
+    return '<div class="legend"><span><i style="background:#1baf7a"></i>' + h(mx.quadrants.HH.desc) + '</span><span><i style="background:#e34948"></i>' + h(mx.quadrants.HL.desc) + '</span><span><i style="background:#2a78d6"></i>' + h(mx.quadrants.LH.desc) + '</span><span><i style="background:#eda100"></i>' + h(mx.quadrants.LL.desc) + '</span><span>크기: ' + h(mx.axes.size) + '</span><span>원 클릭 = 전년 동월 위치(점선)</span></div>' + svg +
+      '<details><summary>분류 표 (' + pts.length + '명, 제외 ' + (mx.excluded || []).length + '명)</summary>' + table([{ t: '중도매인', f: function (p) { return link.ws(p.wholesaler_id, p.name); } }, { t: '분류', f: function (p) { return '<span class="badge" style="background:' + col[p.quadrant] + '22;color:' + col[p.quadrant] + '">' + h(p.quadrantLabel) + '</span>'; } },
+        { t: growthMode ? '전년 동월 대비' : '12개월 구매', num: true, f: function (p) { return growthMode ? (p.x > 0 ? '+' : '') + p.x.toFixed(1) + '%' : won(p.x); } }, { t: '당월 실적', num: true, f: function (p) { return won(p.lastMonth); } }, { t: '회전율', num: true, f: function (p) { return p.y.toFixed(2); } }, { t: '미수금', num: true, f: function (p) { return won(p.balance); } }], pts.slice().sort(function (a, b) { return a.quadrant.localeCompare(b.quadrant) || b.y - a.y; })) +
+      (mx.excluded && mx.excluded.length ? table([{ t: '제외', f: function (p) { return link.ws(p.wholesaler_id, p.name); } }, { t: '사유', k: 'reason' }], mx.excluded) : '') + '</details>';
+  }
+
+  /**
+   * @param root DOM 요소
+   * @param d weeklySummary_ 결과
+   * @param opts { web: bool, onChecklist(caseId), onCase(caseId) }
+   */
+  function renderSummary(root, d, opts) {
+    opts = opts || {};
+    var link = {
+      ws: function (id, name) { return opts.web ? '<a href="#/ws/' + encodeURIComponent(id) + '">' + h(id + ' ' + (name || '')) + '</a>' : '<a href="#ws-' + h(id) + '">' + h(id + ' ' + (name || '')) + '</a>'; },
+      cs: function (id) { return id ? (opts.web ? '<a href="#/case/' + encodeURIComponent(id) + '">' + h(id) + '</a>' : '<a href="#case-' + h(id) + '">' + h(id) + '</a>') : '<span class="muted">—</span>'; }
+    };
+    var k = d.kpis, st = d.status, flaggedHigh = k.flaggedHigh;
+    var html = '';
+    if (st.data_status && st.data_status !== '정상') html += '<div class="note bad">데이터 상태 <b>' + h(st.data_status) + '</b> — ' + h(st.status_reasons || '') + ' 이 기간 수치는 판정 보류입니다.</div>';
+    if (st.ar_available === '아니오') html += '<div class="note warn">미수잔액·입금 자료가 아직 없어 회전율·연체·미수금 증가 징후는 산출되지 않습니다. 실적 감소·담보 기한 징후만 표시됩니다.</div>';
+    // 요약 목록 카드 (행 = 아이콘·큰 숫자·보기 버튼)
+    var trow = function (tab, no, color, value, unit, label, sub, hot) {
+      return '<a class="trow" href="#tab-' + tab + '" data-tab="' + tab + '">' +
+        '<span class="ticon" style="background:' + color + '1f;color:' + color + '">' + no + '</span>' +
+        '<span class="tmid"><span class="tv"' + (hot ? ' style="color:var(--bad)"' : '') + '>' + value + '<small>' + unit + '</small></span><span class="tk">' + label + (sub ? ' <span class="tdot">·</span> ' + sub : '') + '</span></span>' +
+        '<span class="tbtn">보기</span></a>';
+    };
+    html += '<div class="card tlist">' +
+      trow('signal', '①', '#f04452', k.flagged, '명', '채권관리 — 이상 징후', '경고 이상 ' + flaggedHigh + ' · 확인 대기 ' + k.trendWait + (k.trendLate ? ' · <b>지연 ' + k.trendLate + '</b>' : ''), flaggedHigh > 0) +
+      trow('trend', '②', '#3182f6', k.trendsThisWeek, '건/주', '동향관리 — 현장 확인', '체크리스트 대기 ' + k.trendWait + ' · 최근 제출 ' + d.recentTrends.length, false) +
+      trow('action', '③', '#1b9e66', k.openActions, '건 진행', '연체채권 조치', '승인 대기 ' + k.pendingApproval + ' · 재점검 ' + k.recheck + (k.recheckDue ? ' (도래 ' + k.recheckDue + ')' : ''), false) +
+      '<div class="tfoot">채권관리 → 동향관리 → 연체채권 조치 · 목적: 중도매인 실적 관리로 분산 역량 강화</div></div>';
+    // 4분면
+    html += '<div class="card"><h2>거래·회수 4분면 <span class="muted" style="font-size:12px;font-weight:400">세로 미수금 회전율 · 가로 ' + h(d.matrix.axes.x) + '</span></h2>' + matrixSvg(d.matrix, link) + '<div class="note">' + h(d.matrix.disclaimer) + '</div></div>';
+    // 탭
+    html += '<div class="tabs" id="sumTabs"><button data-tab="signal" class="on">① 이상 징후 (' + k.flagged + ')</button><button data-tab="trend">② 현장 확인 (' + (k.trendWait + d.recentTrends.length) + ')</button><button data-tab="action">③ 조치 (' + (k.openActions + k.recheck) + ')</button><button data-tab="guide">조치 안내·매뉴얼 근거</button></div>';
+    // ① 징후
+    html += '<section id="tab-signal" class="tabpane"><div class="card">' + table([
+      { t: '등급', f: function (r) { return badge(r.severity); } }, { t: '중도매인', f: function (r) { return link.ws(r.wholesaler_id, r.name) + (r.assignee ? '<br><span class="muted">' + h(r.assignee) + '</span>' : ''); } },
+      { t: '징후', wrap: true, f: function (r) { return r.signals.map(function (s) { return '<div><b>' + h(s.rule_id) + '</b> ' + h(s.label) + ' <span class="muted">' + h(ev(s)) + '</span></div>'; }).join(''); } },
+      { t: '당월 실적(전년 동월 대비)', num: true, f: function (r) { return r.lastMonth ? won(r.lastMonth.amount) + '<br>' + pct(r.yoy) : '—'; } }, { t: '미수금 / 연체', num: true, f: function (r) { return man(r.balance) + '<br>' + (r.overdue ? '<span class="badge b-bad">' + man(r.overdue) + ' ' + r.overdueDays + '일</span>' : '—'); } },
+      { t: '현장 확인 / 관리 건', f: function (r) { return (r.latest_trend ? h(r.latest_trend.checked_date) + ' ' + h(r.latest_trend.result_class) : (r.trend_due ? '확인 기한 ' + h(r.trend_due) : '<span class="muted">—</span>')) + '<br>' + link.cs(r.case_id) + (r.case_status ? ' ' + badge(r.case_status) : ''); } },
+      { t: '조치 안내', wrap: true, f: function (r) { return (r.guides || []).map(function (g) { return g.first ? '<div><b>' + h(g.first.action) + '</b><br><span class="muted">' + h(g.first.basis) + '</span></div>' : '<div class="muted">' + h(g.label) + ': 확인 필요(조항 미등록)</div>'; }).join('') || '<span class="muted">해당 상황 없음</span>'; } }
+    ], d.flagged, '현재 이상 징후 없음') + '</div></section>';
+    // ② 동향
+    html += '<section id="tab-trend" class="tabpane hidden"><div class="card"><h2>현장 확인 대기 (체크리스트)</h2>' + table([
+      { t: '관리 건', f: function (r) { return link.cs(r.case_id); } }, { t: '중도매인', f: function (r) { return link.ws(r.wholesaler_id, r.name); } }, { t: '담당 경매사', k: 'auctioneer' }, { t: '징후', f: function (r) { return r.signals.join(', '); } },
+      { t: '확인 기한', f: function (r) { return h(r.trend_due) + (r.overdue ? ' ' + badge('지연') : ''); } }, { t: '', f: function (r) { return '<button data-ck="' + h(r.case_id) + '">체크리스트' + (opts.web ? ' 입력·인쇄' : ' 인쇄') + '</button>'; } }
+    ], d.trendWait, '확인 대기 없음') + '<h2 style="margin-top:14px">최근 제출된 동향보고</h2>' + table([
+      { t: '제출', f: function (t) { return h((t.submitted_at || '').substring(0, 10)); } }, { t: '중도매인', f: function (t) { return link.ws(t.wholesaler_id, t.name); } }, { t: '관리 건', f: function (t) { return link.cs(t.case_id); } }, { t: '확인', f: function (t) { return h(t.checked_date + ' ' + t.check_method); } },
+      { t: '확인된 사실', wrap: true, f: function (t) { return (t.facts || []).slice(0, 3).map(h).join('<br>') + (t.facts && t.facts.length > 3 ? '<br><span class="muted">외 ' + (t.facts.length - 3) + '</span>' : ''); } }, { t: '결과', f: function (t) { return h(t.result_class); } }, { t: '작성', k: 'writer' }
+    ], d.recentTrends, '제출된 보고 없음') + '</div></section>';
+    // ③ 조치
+    html += '<section id="tab-action" class="tabpane hidden"><div class="card"><h2>진행 중 조치</h2>' + table([
+      { t: '관리 건', f: function (a) { return link.cs(a.case_id); } }, { t: '중도매인', f: function (a) { return link.ws(a.wholesaler_id, a.name); } }, { t: '조치', f: function (a) { return h(a.action_type) + (Number(a.dunning_round) >= 1 ? ' ' + badge(a.dunning_round + '차') : ''); } }, { t: '내용', k: 'content', wrap: true }, { t: '담당', k: 'owner' }, { t: '기한', k: 'due_date' }, { t: '승인', f: function (a) { return badge(a.approval_status); } }
+    ], d.openActions, '진행 중 조치 없음') + '<h2 style="margin-top:14px">재점검 예정</h2>' + table([
+      { t: '관리 건', f: function (r) { return link.cs(r.case_id); } }, { t: '중도매인', f: function (r) { return link.ws(r.wholesaler_id, r.name); } }, { t: '종결 사유', k: 'close_reason' }, { t: '재점검일', f: function (r) { return h(r.recheck_date) + (r.due ? ' ' + badge('도래') : ''); } }
+    ], d.recheck, '없음') + '<h2 style="margin-top:14px">최근 완료</h2>' + table([
+      { t: '완료', k: 'done_date' }, { t: '관리 건', f: function (a) { return link.cs(a.case_id); } }, { t: '중도매인', f: function (a) { return link.ws(a.wholesaler_id, a.name); } }, { t: '조치', f: function (a) { return h(a.action_type) + (Number(a.dunning_round) >= 1 ? ' ' + badge(a.dunning_round + '차') + ' <span class="muted">' + h(a.sent_method || '') + '</span>' : ''); } }, { t: '결과', k: 'result', wrap: true }
+    ], d.doneActions, '없음') + '</div></section>';
+    // 조치 안내
+    html += '<section id="tab-guide" class="tabpane hidden"><div class="card"><div class="note">상황별 조치 1줄과 매뉴얼 조항·호·목 근거입니다. 조항이 등록되지 않은 상황은 "확인 필요"로 표시하며 절차를 임의로 만들지 않습니다.</div>' + table([
+      { t: '상황', f: function (g) { return '<b>' + h(g.label) + '</b><br><span class="muted">' + h((g.signals || []).join('+')) + (g.min_overdue_days ? ' · 연체 ' + h(g.min_overdue_days) + '일↑' : '') + (g.result_class ? ' · ' + h(g.result_class) : '') + '</span>'; } },
+      { t: '조치 (1줄)', wrap: true, f: function (g) { return g.steps.length ? g.steps.map(function (s) { return '<div>' + h(s.step_no) + '. ' + h(s.action) + '</div>'; }).join('') : badge('확인 필요'); } },
+      { t: '매뉴얼 근거 (조·항·호·목)', wrap: true, f: function (g) { return g.steps.length ? g.steps.map(function (s) { return '<div>' + h(s.basis) + ' <span class="muted">(시행 ' + h(s.effective_from) + ')</span></div>'; }).join('') : ((g.candidates || []).length ? '<span class="muted">근거 후보: ' + g.candidates.map(function (c) { return h(c.doc_name + ' ' + c.version); }).join(', ') + '</span>' : '<span class="muted">등록 문서 없음</span>'); } },
+      { t: '필요 서식', f: function (g) { return g.steps.map(function (s) { return s.forms.map(h).join(', '); }).filter(Boolean).join('<br>') || '—'; } }
+    ], d.guides, '등록된 상황 없음') + '</div></section>';
+    root.innerHTML = html;
+    root.addEventListener('click', function (e) {   // 원 클릭 → 전년 동월 점선 원 토글
+      var g = e.target.closest('g.pt'); if (!g) return;
+      var prev = root.querySelector('g.prev[data-prev="' + g.getAttribute('data-ws') + '"]');
+      if (prev) prev.style.display = prev.style.display === 'none' ? '' : 'none';
+    });
+    var tabs = root.querySelector('#sumTabs');
+    var show = function (t) { Array.prototype.forEach.call(tabs.children, function (b) { b.className = b.getAttribute('data-tab') === t ? 'on' : ''; }); Array.prototype.forEach.call(root.querySelectorAll('.tabpane'), function (p) { p.classList.toggle('hidden', p.id !== 'tab-' + t); }); };
+    tabs.onclick = function (e) { var t = e.target.getAttribute('data-tab'); if (t) show(t); };
+    Array.prototype.forEach.call(root.querySelectorAll('.trow'), function (a) { a.onclick = function (e) { e.preventDefault(); show(a.getAttribute('data-tab')); tabs.scrollIntoView({ block: 'start' }); }; });
+    root.addEventListener('click', function (e) { var b = e.target.closest('button[data-ck]'); if (b && opts.onChecklist) opts.onChecklist(b.getAttribute('data-ck')); });
+  }
+
+  /** 서면 체크리스트 인쇄용 HTML (관리 건 1개) */
+  function checklistHtml(ck, opts) {
+    var items = ck.items || [];
+    return '<div class="ck-sheet" id="ck-' + h(ck.case_id) + '"><h2>이상징후 현장 확인 체크리스트</h2>' +
+      '<table class="ck-head"><tr><th>관리 건</th><td>' + h(ck.case_id) + '</td><th>중도매인</th><td>' + h(ck.wholesaler_id + ' ' + (ck.name || '')) + '</td></tr>' +
+      '<tr><th>발생 징후</th><td colspan="3">' + h((ck.signals || []).join(', ') || '—') + '</td></tr>' +
+      '<tr><th>확인일</th><td>____년 __월 __일</td><th>확인 방법</th><td>□ 대면 □ 전화 □ 경매 현장 □ 기타</td></tr>' +
+      '<tr><th>확인자(경매사)</th><td>' + h(ck.auctioneer || '') + '</td><th>확인 상대방</th><td></td></tr></table>' +
+      '<table class="ck"><thead><tr><th style="width:36px">No</th><th style="width:70px">구분</th><th>확인 항목</th><th style="width:40px">예</th><th style="width:48px">아니오</th><th style="width:48px">미확인</th><th style="width:180px">비고(사실만)</th></tr></thead><tbody>' +
+      items.map(function (it, i) { return '<tr><td>' + (i + 1) + '</td><td>' + h(it.category) + '</td><td>' + h(it.text) + (it.is_assumed ? ' <span class="muted">(가정)</span>' : '') + '</td><td class="box">☐</td><td class="box">☐</td><td class="box">☐</td><td></td></tr>'; }).join('') + '</tbody></table>' +
+      '<p class="muted" style="font-size:12px">확인된 사실만 체크하고, 의견은 아래 칸에 따로 적습니다. 체크 후 채권관리 담당자에게 전달하면 담당자가 결과를 전산에 입력합니다.</p>' +
+      '<table class="ck-head"><tr><th>작성자 의견</th><td style="height:60px"></td></tr><tr><th>결제계획·영업 상황</th><td style="height:40px"></td></tr></table></div>';
+  }
+
+  global.SummaryView = { render: renderSummary, checklistHtml: checklistHtml, h: h };
+})(window);
+</script>
+<style>
+  .tlist { padding: 8px 10px; margin-bottom: 12px; }
+  .trow { display: flex; align-items: center; gap: 14px; padding: 13px 12px; border-radius: 16px; color: var(--text); text-decoration: none; }
+  .trow:hover { background: var(--surface-2); text-decoration: none; }
+  .ticon { width: 44px; height: 44px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 700; flex: none; }
+  .tmid { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  .tv { font-size: 20px; font-weight: 800; line-height: 1.25; font-variant-numeric: tabular-nums; }
+  .tv small { font-size: 13px; font-weight: 600; color: var(--text-2); margin-left: 3px; }
+  .tk { font-size: 13px; color: var(--muted); } .tk b { color: var(--bad); } .tdot { opacity: .5; }
+  .tbtn { background: var(--surface-2); border-radius: 12px; padding: 8px 14px; font-size: 14px; font-weight: 600; color: var(--text-2); flex: none; }
+  .tfoot { padding: 11px 12px 5px; font-size: 12.5px; color: var(--muted); border-top: 1px solid var(--border); margin-top: 4px; }
+  .tabpane.hidden { display: none; }
+  .tabs button.on { background: var(--info-bg); font-weight: 600; }
+  .ck-sheet { background: #fff; color: #111; border: 1px solid #999; padding: 16px; margin: 12px 0; page-break-after: always; }
+  .ck-sheet h2 { margin: 0 0 8px; font-size: 17px; }
+  .ck-sheet table { border-collapse: collapse; width: 100%; font-size: 12.5px; margin-bottom: 8px; }
+  .ck-sheet th, .ck-sheet td { border: 1px solid #999; padding: 5px 6px; text-align: left; vertical-align: top; white-space: normal; color: #111; background: #fff; }
+  .ck-sheet th { background: #f0f0f0; font-weight: 600; width: 110px; }
+  .ck-sheet .ck th { width: auto; } .ck-sheet td.box { text-align: center; font-size: 16px; }
+  @media print { body * { visibility: hidden; } .ck-sheet, .ck-sheet * { visibility: visible; } .ck-sheet { position: absolute; left: 0; top: 0; width: 100%; } }
+</style>

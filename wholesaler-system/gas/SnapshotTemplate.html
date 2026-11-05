@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>중도매인 채권관리 주간 현황</title>
+<!--STYLES-->
+<!--SUMMARYVIEW-->
+<style>
+  .shell { display: block; } main { max-width: 1100px; }
+  .topbar .statusbar { justify-content: flex-start; }
+  details > summary { cursor: pointer; font-weight: 600; margin: 6px 0; }
+</style>
+</head>
+<body>
+<header class="topbar"><div class="brand">중도매인 채권관리 주간 현황 <span class="ver" id="snapFor"></span></div><div class="statusbar" id="statusbar"></div><div class="who">스냅샷 · 사내 공유용</div></header>
+<main id="view"><p class="muted">자료를 읽는 중…</p></main>
+<script>
+var DATA = /*DATA*/null;
+(function () {
+  'use strict';
+  var h = SummaryView.h;
+  function wsName(id) { var w = (DATA.wholesalers || []).filter(function (x) { return x.wholesaler_id === id; })[0]; return w ? w.name : ''; }
+  var d = DATA, st = d.status;
+  document.getElementById('snapFor').textContent = d.for_user.name + ' (' + d.for_user.role + ') 용 · ' + d.generated_at + ' 생성';
+  document.getElementById('statusbar').innerHTML = '<span>기준일 <b>' + h(st.base_date) + '</b></span><span>집계기간 <b>' + h(d.meta.period12) + '</b></span><span>최종 갱신 <b>' + h(st.last_updated) + '</b></span><span>데이터 상태 <b>' + h(st.data_status || '자료없음') + '</b></span>';
+  var root = document.getElementById('view');
+  root.innerHTML = '<div class="note">' + h(d.notes.privacy) + '</div><div id="summary"></div><section id="checklists"></section><section id="trendform"></section><section id="wsdetail"></section>';
+  SummaryView.render(document.getElementById('summary'), d, { web: false, onChecklist: function (caseId) { var el = document.getElementById('ck-' + caseId); if (el) { el.scrollIntoView(); } } });
+  // 체크리스트 인쇄 시트
+  var cks = document.getElementById('checklists');
+  cks.innerHTML = '<h1 style="font-size:18px">현장 확인 체크리스트 (인쇄용)</h1>' + (d.checklists.length ? '<p class="muted">브라우저 인쇄(Ctrl+P)로 출력해 경매사에게 전달하세요. 체크된 서면은 채권관리 담당자가 결과를 입력합니다.</p>' + d.checklists.map(function (ck) { return SummaryView.checklistHtml(ck); }).join('') : '<p class="muted">현장 확인 대기 관리 건이 없습니다.</p>');
+  // 동향보고 파일 제출 폼(경매사용)
+  var openCases = d.cases.filter(function (c) { return c.status !== '종결' && c.status !== '재점검대기'; });
+  document.getElementById('trendform').innerHTML = '<h1 style="font-size:18px">동향보고 파일 제출 (전산 입력 대신 파일로)</h1><div class="note">작성 후 "파일 만들기"를 누르면 TREND_….json 파일이 내려옵니다. 사내 메일로 채권관리 담당자에게 보내면 다음 정기 처리 때 반영됩니다.</div>' +
+    '<form class="f" id="tf"><label>관리 건*<select name="case_id" id="caseSel">' + openCases.map(function (c) { return '<option value="' + h(c.case_id) + '">' + h(c.case_id + ' ' + wsName(c.wholesaler_id)) + '</option>'; }).join('') + '</select></label>' +
+    '<label>작성자 이메일*<input name="writer_id" value="' + h(d.for_user.user_id) + '"></label><label>확인일*<input type="date" name="checked_date" required></label><label>확인 방법*<select name="check_method">' + ['방문', '전화', '면담', '경매 현장', '기타'].map(function (x) { return '<option>' + x + '</option>'; }).join('') + '</select></label>' +
+    '<label class="full">확인된 사실* (한 줄에 하나, 의견은 쓰지 않음)<textarea name="facts"></textarea></label><label>결제계획<input name="payment_plan"></label><label>확인 결과 분류*<select name="result_class"><option value="">선택</option>' + d.resultClasses.map(function (r) { return '<option>' + h(r) + '</option>'; }).join('') + '</select></label><label>재점검일*<input type="date" name="recheck_date"></label>' +
+    '<label class="full">작성자 의견 (사실과 별도)<textarea name="opinion"></textarea></label><div class="full"><button class="primary" type="button" id="mk">파일 만들기</button> <span class="muted" id="mkMsg"></span></div></form>';
+  document.getElementById('mk').onclick = function () {
+    var f = document.getElementById('tf'), o = {};
+    Array.prototype.forEach.call(f.elements, function (el) { if (el.name) o[el.name] = el.value; });
+    o.facts = String(o.facts || '').split('\n').map(function (x) { return x.trim(); }).filter(Boolean);
+    var msg = document.getElementById('mkMsg');
+    if (!o.case_id || !o.checked_date || !o.facts.length || !o.result_class || !o.recheck_date) { msg.textContent = '관리 건·확인일·확인된 사실·결과 분류·재점검일은 필수입니다.'; return; }
+    o.submitted_at = new Date().toISOString(); o.snapshot_generated_at = d.generated_at;
+    var name = 'TREND_' + o.case_id + '_' + o.checked_date.replace(/-/g, '') + '.json';
+    var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(o, null, 2)], { type: 'application/json' })); a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    msg.textContent = name + ' 파일을 내려받았습니다.';
+  };
+  // 중도매인 상세(접기)
+  var won = function (n) { return n === null || n === undefined || n === '' ? '—' : Number(n).toLocaleString('ko-KR') + '원'; };
+  var pct = function (g) { return !g ? '—' : g.status !== '정상' ? g.status : (g.value > 0 ? '+' : '') + (g.value * 100).toFixed(1) + '%'; };
+  document.getElementById('wsdetail').innerHTML = '<h1 style="font-size:18px">중도매인별 현황 (' + d.wholesalers.length + '명)</h1>' + d.wholesalers.map(function (w) {
+    var all = w.byCategory['전체'];
+    return '<details id="ws-' + h(w.wholesaler_id) + '"><summary>' + h(w.wholesaler_id + ' ' + w.name) + ' — 당월 ' + won(all.lastMonth.amount) + ' (전년 동월 대비 ' + h(pct(all.lastMonth.yoy)) + ') · 미수 ' + won(w.balance) + '</summary>' +
+      '<div class="scroll"><table><thead><tr><th>부류</th><th class="num">12개월 구매</th><th class="num">당월(' + h(all.lastMonth.ym) + ')</th><th class="num">전년 동월 대비</th><th class="num">전년 누적 대비</th></tr></thead><tbody>' + Object.keys(w.byCategory).map(function (c) { var v = w.byCategory[c]; return '<tr><td>' + h(c) + '</td><td class="num">' + won(v.amount12) + '</td><td class="num">' + won(v.lastMonth.amount) + '</td><td class="num">' + h(pct(v.lastMonth.yoy)) + '</td><td class="num">' + h(pct(v.ytd.growth)) + '</td></tr>'; }).join('') + '</tbody></table></div>' +
+      '<p class="muted">한도: ' + (w.limits.map(function (l) { return h(l.limit_type) + ' ' + won(l.amount); }).join(' · ') || '없음') + ' / 담보: ' + (w.collaterals.map(function (c) { return h(c.type) + ' ' + won(c.set_amount) + (c.expiry_date ? '(만기 ' + h(c.expiry_date) + ')' : ''); }).join(' · ') || '없음') + ' / 연대보증: ' + h(w.guarantee ? w.guarantee.has : '—') + '</p></details>';
+  }).join('');
+  // 관리 건 앵커(요약표의 관리 건 링크용)
+  d.cases.forEach(function (c) { var a = document.createElement('div'); a.id = 'case-' + c.case_id; a.className = 'muted'; a.style.fontSize = '12px'; a.textContent = c.case_id + ' · ' + c.status + ' · ' + (c.auctioneer || ''); document.getElementById('wsdetail').appendChild(a); });
+})();
+</script>
+</body>
+</html>

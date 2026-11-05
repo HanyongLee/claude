@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <title>중도매인 통합관리</title>
+  <?!= include_('Styles'); ?>
+</head>
+<body>
+  <header class="topbar">
+    <button class="menu-btn" id="menuBtn" aria-label="메뉴">☰</button>
+    <div class="brand">중도매인 통합관리 <span class="ver" id="appVer"></span></div>
+    <div class="statusbar" id="statusbar"></div>
+    <div class="who" id="who">사용자 확인 중…</div>
+  </header>
+  <div class="shell">
+    <aside class="side" id="side"><nav id="nav"></nav></aside>
+    <main id="view"><p class="muted">불러오는 중…</p></main>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <?!= include_('SummaryView'); ?>
+  <?!= include_('Client'); ?>
+</body>
+</html>

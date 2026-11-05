@@ -1,0 +1,14 @@
+# 회사 실자료·내부 규정·서식 원본은 저장소에 올리지 않는다 (구글 드라이브 폴더에서만 관리)
+*.csv
+*.xlsx
+*.xls
+*.hwp
+*.hwpx
+*.docx
+*.pdf
+data/
+internal/
+settings/
+.clasp.json
+.clasprc.json
+node_modules/
