@@ -202,7 +202,19 @@ function createGas(opts) {
     getProjectTriggers: () => triggers.slice(),
     deleteTrigger: (tr) => { const i = triggers.indexOf(tr); if (i >= 0) triggers.splice(i, 1); }
   };
-  const HtmlService = { createHtmlOutputFromFile: (name) => ({ getContent: () => require('fs').readFileSync(require('path').join(opts.gasDir || __dirname + '/../gas', name + '.html'), 'utf8') }) };
+  // 웹앱 응답 객체: 내용 + 제목·메타·프레임 설정(체인)
+  const htmlOut = (content) => { const o = { _title: '', _meta: {}, getContent: () => content, setTitle: (t) => { o._title = t; return o; }, getTitle: () => o._title,
+    addMetaTag: (k, v) => { o._meta[k] = v; return o; }, setXFrameOptionsMode: () => o, setSandboxMode: () => o }; return o; };
+  const HtmlService = {
+    XFrameOptionsMode: { DEFAULT: 'DEFAULT', ALLOWALL: 'ALLOWALL' },
+    createHtmlOutputFromFile: (name) => htmlOut(require('fs').readFileSync(require('path').join(opts.gasDir || __dirname + '/../gas', name + '.html'), 'utf8')),
+    createHtmlOutput: (html) => htmlOut(String(html || '')),
+    // 템플릿: <?!= include_('X'); ?> 만 지원. 실제 함수 호출은 state.resolveInclude(이름) 로 위임(검증 코드가 vm 문맥의 include_ 를 연결)
+    createTemplate: (src) => ({ evaluate: () => htmlOut(String(src).replace(/<\?!=\s*include_\('(\w+)'\);?\s*\?>/g, (m, n) => {
+      if (!state.resolveInclude) throw new Error('모의 환경: state.resolveInclude 미설정');
+      return state.resolveInclude(n);
+    })) })
+  };
   const logs = [];
   const Logger = { log: (m) => { logs.push(String(m)); } };
   const MimeType = { CSV: 'text/csv' };

@@ -8,7 +8,7 @@ const fs = require('fs'), path = require('path'), vm = require('vm');
 const { createGas } = require('./gas_mock');
 const GAS = path.join(__dirname, '..', 'gas');
 const ORDER = ['Config.gs', 'Logic.gs', 'Db.gs', 'Audit.gs', 'Auth.gs', 'Setup.gs', 'Pipeline.gs', 'Backup.gs', 'Master.gs', 'Metrics.gs', 'Signals.gs',
-  'Work.gs', 'Docs.gs', 'Performance.gs', 'Backtest.gs', 'Qa.gs', 'Notify.gs', 'Api.gs', 'VirtualData.gs', 'TestData.gs', 'Main.gs', 'Install.gs', 'NhImport.gs', 'Snapshot.gs', 'Checklist.gs'];
+  'Work.gs', 'Docs.gs', 'Performance.gs', 'Backtest.gs', 'Qa.gs', 'Notify.gs', 'Api.gs', 'VirtualData.gs', 'TestData.gs', 'Main.gs', 'Install.gs', 'NhImport.gs', 'Snapshot.gs', 'Checklist.gs', 'Start.gs'];
 const OWNER = 'owner@example.invalid';
 const FROZEN = new Date('2026-10-28T09:00:00+09:00').getTime(), REAL0 = Date.now();
 class FrozenDate extends Date { constructor(...a) { if (!a.length) super(FROZEN + (Date.now() - REAL0)); else super(...a); } static now() { return FROZEN + (Date.now() - REAL0); } }
@@ -267,6 +267,40 @@ section('월별 사업실적 파일만으로 운영 (실제 추출 파일 열 �
   ok(sum2.matrix.points.length === 0 && gr && gr.points.length === 5 && gr.points[0].wholesaler_id === '1' && gr.idle.length === 1 && gr.idle[0].wholesaler_id === '6', '회전율 없음 → 4분면 대신 전년 동월 대비 증감 순위(거래 없는 중도매인은 따로)', gr ? `순위 ${gr.points.map(p => p.wholesaler_id + ' ' + p.x.toFixed(0) + '%').join(', ')} / 거래 없음 ${gr.idle.map(p => p.wholesaler_id).join(',')}` : '순위 없음');
   const html2 = run(c2, `(function(){ var f = DriveApp.getFolderById(PropertiesService.getScriptProperties().getProperty('FOLDER_DEPLOY')); var it = f.getFiles(); while (it.hasNext()) { var x = it.next(); if (/전체/.test(x.getName())) return x.getBlob().getDataAsString('UTF-8'); } return ''; })()`);
   ok(html2.indexOf('growthRank') >= 0 && html2.indexOf('(가상)갑') >= 0, '스냅샷 HTML 에 증감 순위 자료 포함');
+}
+
+/* ───── 3e. 한 파일 설치본(dist/apps-script/Code.gs)만으로 동작 ───── */
+section('Apps Script 한 파일 설치본: Code.gs 하나로 시작 함수·웹앱 화면·스냅샷');
+{
+  const built = require('../tools/build_bundle.js').build();
+  const bundle = fs.readFileSync(built.code, 'utf8');
+  const manifest = JSON.parse(fs.readFileSync(built.manifest, 'utf8'));
+  ok(!/Install\.gs|installFiles_/.test(bundle) && /var START_ROOT_FOLDER = /.test(bundle.slice(0, 4000)), '설치본: 설치기 제외, 폴더 이름 설정이 파일 첫 화면에 있음', Math.round(built.bytes / 1024) + 'KB · ' + built.lines + '줄');
+  ok(!manifest.oauthScopes.some(x => /script\.projects|external_request/.test(x)) && manifest.dependencies.enabledAdvancedServices[0].serviceId === 'drive', '설치본 권한: Apps Script API·외부 호출 권한 없음, 엑셀 변환용 Drive 서비스 포함', manifest.oauthScopes.length + '개 권한');
+  const gas3 = createGas({ ownerEmail: OWNER, gasDir: '/nonexistent' });   // 별도 HTML 파일이 없어도 동작해야 한다
+  const c3 = vm.createContext(Object.assign({ Date: FrozenDate }, gas3.globals));
+  vm.runInContext(bundle, c3, { filename: 'Code.gs' });
+  c3.__gas = gas3;
+  gas3.state.resolveInclude = (n) => vm.runInContext('include_(' + J(n) + ')', c3);
+  run(c3, `(function(){ var f = DriveApp.createFolder('2611_AI혁신센터_채권관리'); __root = f.getId(); })()`);
+  const root3 = run(c3, '__root');
+  const mrows3 = [];
+  for (let ym = '2024-01'; ym <= '2026-08'; ym = run(c3, `addMonths_('${ym}', 1)`)) [['1', '(가상)갑', 1], ['2', '(가상)을', ym >= '2026-06' ? 0.5 : 1]].forEach(w => mrows3.push([ym, w[0], w[1], 1000, Math.round(20000000 * w[2])]));
+  putFile(c3, root3, '2024년~2026년8월_공판장거래인_사업실적.xlsx의 사본.csv', nhMonthly(mrows3));
+  const log3 = run(c3, 'startHere()');
+  ok(log3.some(l => /^✔ 1\. 기초자료 폴더 연결/.test(l)) && log3.some(l => /^✔ 3\. .*: 완료/.test(l)) && log3.some(l => /^✔ 5\. 주간 스냅샷/.test(l)) && log3.some(l => /^✔ 4\. 정기 실행 예약/.test(l)), 'startHere 한 번: 폴더 연결 → 엑셀 처리 → 정기 실행 예약 → 스냅샷', log3.filter(l => /^[✔✖–]/.test(l)).map(l => l.slice(0, 2) + l.slice(2, 14)).join(' / '));
+  ok(log3.some(l => /^✖ 2\. 업무매뉴얼/.test(l)) && log3.some(l => /새 배포/.test(l)), '매뉴얼 폴더가 없어도 멈추지 않고 표시만, 마지막에 배포 안내', log3.find(l => /2\. 업무매뉴얼/.test(l)));
+  const page = run(c3, 'doGet()');
+  const html3 = page.getContent();
+  ok(page.getTitle() === run(c3, 'APP.NAME') && html3.indexOf('<?') < 0 && /function pageHome|SummaryView/.test(html3) && html3.length > 100000, '웹앱 화면(doGet): 내장 HTML 로 완성된 페이지(제목·스타일·화면 코드 포함)', Math.round(html3.length / 1024) + 'KB · 제목 ' + page.getTitle());
+  const snap3 = run(c3, `(function(){ var f = DriveApp.getFolderById(PropertiesService.getScriptProperties().getProperty('FOLDER_DEPLOY')); var it = f.getFiles(), o=[]; while (it.hasNext()) { var x = it.next(); o.push(x.getBlob().getDataAsString('UTF-8')); } return o; })()`);
+  ok(snap3.length >= 1 && snap3[0].indexOf('<!--STYLES-->') < 0 && snap3[0].indexOf('(가상)갑') >= 0, '스냅샷 HTML 도 내장 화면으로 생성', snap3.length + '개');
+  const again = run(c3, 'startHere()');
+  ok(again.some(l => /^✔ 3\. .*: 완료/.test(l)) && table(c3, 'DB_RAW', 'R_SALES_MONTHLY').length === mrows3.length, 'startHere 를 다시 실행해도 자료 중복 없음', table(c3, 'DB_RAW', 'R_SALES_MONTHLY').length + '행');
+  const wrong = boot(); run(wrong, `(function(){ setProp_('X','1'); })()`);
+  vm.runInContext("START_ROOT_FOLDER = '없는폴더'", wrong);
+  let err = ''; try { run(wrong, 'startHere()'); } catch (e) { err = e.message; }
+  ok(/START_ROOT_FOLDER/.test(err), '폴더 이름이 틀리면 고칠 곳을 알려 주고 멈춤', err.slice(0, 60));
 }
 
 /* ───── 4. 가상 데이터(미수 포함) 환경에서도 회귀 없음 ───── */

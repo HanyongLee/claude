@@ -23,6 +23,6 @@
 
 하이브리드 배포(권장): 담당자 드라이브 폴더에서 `setupWithFolder('폴더명')` → 폴더의 농협 엑셀 자동 적재 → 매일 `40_배포`에 스냅샷 HTML 생성 → 사내 메일·게시판 공유. 자세한 내용은 docs/11.
 
-빠른 시작(관리자 1명, 15분): [docs/10_간단설치_배포가이드.md](docs/10_간단설치_배포가이드.md) — Apps Script API 켜기 → `Install.gs`·`appsscript.json` 붙여넣기 → `install` → `setupAll` → 웹앱 배포. 임직원은 설치 없이 링크 + 접속코드로 접속.
+빠른 시작(관리자 1명, 15분): [docs/10_간단설치_배포가이드.md](docs/10_간단설치_배포가이드.md) — 새 Apps Script 프로젝트에 `dist/apps-script/Code.gs`·`appsscript.json` 붙여넣기 → `startHere` 실행 → 배포 → 웹 앱 URL 이 홈페이지. (설치본 다시 만들기: `node tools/build_bundle.js`) 임직원은 설치 없이 링크 + 접속코드로 접속.
 
 로컬 검증: `node tests/run_tests.js` · `node tests/run_tests_phase2.js` · `node tests/run_tests_phase3.js` · `node tests/run_tests_phase4.js` (Node 18+, 추가 패키지 없음) · 화면 캡처: `node tests/render_ui.js <폴더>` (Playwright 필요)

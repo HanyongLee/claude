@@ -112,9 +112,9 @@ function weeklySummary_(user) {
 }
 
 function snapshotHtml_(data) {
-  var tpl = HtmlService.createHtmlOutputFromFile('SnapshotTemplate').getContent();
-  var css = HtmlService.createHtmlOutputFromFile('Styles').getContent();
-  var view = HtmlService.createHtmlOutputFromFile('SummaryView').getContent();
+  var tpl = htmlFile_('SnapshotTemplate');
+  var css = htmlFile_('Styles');
+  var view = htmlFile_('SummaryView');
   var json = JSON.stringify(data).replace(/<\/script/gi, '<\\/script');
   return tpl.replace('<!--STYLES-->', css).replace('<!--SUMMARYVIEW-->', view).replace('/*DATA*/null', json);
 }

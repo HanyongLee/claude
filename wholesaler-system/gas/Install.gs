@@ -17,7 +17,7 @@ var INSTALL_SOURCE = {
   owner: 'HanyongLee', repo: 'claude', branch: 'claude/wholesaler-management-system-ae6ph9', dir: 'wholesaler-system/gas',
   files: ['appsscript.json', 'Config.gs', 'Logic.gs', 'Db.gs', 'Audit.gs', 'Auth.gs', 'Setup.gs', 'Pipeline.gs', 'Backup.gs', 'Master.gs',
     'Metrics.gs', 'Signals.gs', 'Work.gs', 'Docs.gs', 'Performance.gs', 'Backtest.gs', 'Qa.gs', 'Notify.gs', 'Api.gs',
-    'VirtualData.gs', 'TestData.gs', 'Main.gs', 'Install.gs', 'NhImport.gs', 'Snapshot.gs', 'Checklist.gs', 'Index.html', 'Styles.html', 'Client.html', 'SummaryView.html', 'SnapshotTemplate.html']
+    'VirtualData.gs', 'TestData.gs', 'Main.gs', 'Install.gs', 'NhImport.gs', 'Snapshot.gs', 'Checklist.gs', 'Start.gs', 'Index.html', 'Styles.html', 'Client.html', 'SummaryView.html', 'SnapshotTemplate.html']
 };
 
 /** 설치 전 appsscript.json 에 붙여넣을 내용(설치가 이 매니페스트의 권한 범위를 필요로 한다) */
