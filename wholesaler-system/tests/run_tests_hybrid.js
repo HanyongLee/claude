@@ -8,7 +8,7 @@ const fs = require('fs'), path = require('path'), vm = require('vm');
 const { createGas } = require('./gas_mock');
 const GAS = path.join(__dirname, '..', 'gas');
 const ORDER = ['Config.gs', 'Logic.gs', 'Db.gs', 'Audit.gs', 'Auth.gs', 'Setup.gs', 'Pipeline.gs', 'Backup.gs', 'Master.gs', 'Metrics.gs', 'Signals.gs',
-  'Work.gs', 'Docs.gs', 'Performance.gs', 'Backtest.gs', 'Qa.gs', 'Notify.gs', 'Api.gs', 'VirtualData.gs', 'TestData.gs', 'Main.gs', 'Install.gs', 'NhImport.gs', 'Snapshot.gs'];
+  'Work.gs', 'Docs.gs', 'Performance.gs', 'Backtest.gs', 'Qa.gs', 'Notify.gs', 'Api.gs', 'VirtualData.gs', 'TestData.gs', 'Main.gs', 'Install.gs', 'NhImport.gs', 'Snapshot.gs', 'Checklist.gs'];
 const OWNER = 'owner@example.invalid';
 const FROZEN = new Date('2026-10-28T09:00:00+09:00').getTime(), REAL0 = Date.now();
 class FrozenDate extends Date { constructor(...a) { if (!a.length) super(FROZEN + (Date.now() - REAL0)); else super(...a); } static now() { return FROZEN + (Date.now() - REAL0); } }
@@ -199,6 +199,37 @@ section('매뉴얼 폴더 자동 등록 (실제 파일명 규칙, 내용은 읽�
   const reg = run(ctx, `api_registerProcedure({ situation_code: 'SIT-OVD-30', step_no: 1, content: '(가상) 담당자가 입력한 절차', doc_id: ${J(v.doc_id)}, doc_version: 'v2022.12.29', article: '제12조', page: '34' }, '담당자 입력')`);
   const p30b = run(ctx, `proceduresFor_('SIT-OVD-30', todayStr_())`);
   ok(reg.ok && p30b.status === '정상' && p30b.steps[0].doc_name === '(가상)업무방법B_3편_2장_여신관리' && p30b.candidates.length === 0, '담당자가 조항·쪽수를 등록하면 정상 절차로 전환');
+}
+
+/* ───── 3c. 주간 요약·체크리스트 ───── */
+section('주간 요약 화면·이상징후 체크리스트·주간 스냅샷 주기');
+{
+  const sm = run(ctx, 'api_summary()').data;
+  ok(sm.kpis && sm.flagged.length >= 1 && sm.matrix.quadrants && sm.guides.length === 9 && sm.checklists.length >= 1 && sm.checklistItems.length === 11, '요약: 징후·동향·조치 3영역 + 4분면 + 조치 안내 + 체크리스트 자료', `징후 ${sm.flagged.length}명, 대기 ${sm.trendWait.length}, 조치 ${sm.openActions.length}`);
+  const f6 = sm.flagged.find(x => x.wholesaler_id === '6');
+  ok(f6 && f6.signals.some(s => s.rule_id === 'S06') && f6.guides.some(g => g.situation_code === 'SIT-COLL-EXPIRY'), '징후 행에 해당 상황의 조치 안내(확인 필요 또는 1줄+조항)가 붙음', f6 && f6.guides.map(g => g.label + ':' + g.status).join(', '));
+  const ckCase = sm.checklists[0];
+  const items = ckCase.items;
+  ok(items.every(i => i.is_assumed) && items.some(i => i.category === '결제'), '체크리스트 11개 항목은 모두 "가정" 표시');
+  const answers = {}; items.forEach(i => { answers[i.item_id] = '아니오'; }); answers[items[2].item_id] = '예'; answers[items[7].item_id] = '예'; answers[items[9].item_id] = '미확인';
+  const bad = run(ctx, `api_saveChecklist({ case_id: ${J(ckCase.case_id)}, checked_date: '2026-10-28', answers: ${J(answers)}, recheck_date: '2026-11-30' })`);
+  ok(!bad.ok && /결과 분류/.test(bad.error), '결과 분류 없이 저장 → 거부(담당자 판단 필수)');
+  const sv = run(ctx, `api_saveChecklist({ case_id: ${J(ckCase.case_id)}, checked_date: '2026-10-28', checker_name: '(가상)경매사A', by_paper: true, answers: ${J(answers)}, remarks: { ${J(items[2].item_id)}: '(가상) 11/15 결제 약속' }, result_class: '채권 검토 필요', recheck_date: '2026-11-30' })`);
+  ok(sv.ok && sv.data.score.yes === 4 && sv.data.score.level === '높음', '가중 점수(결제 2 + 대표자 2 = 4) → 제안 "높음"(가정값 3 이상)', JSON.stringify(sv.data.score));
+  const tr = table(ctx, 'DB_WORK', 'T_TREND').find(t => t.report_id === sv.data.report.report_id);
+  const facts = JSON.parse(tr.facts_json);
+  ok(tr.check_method === '현장 체크리스트(서면)' && facts.length === 2 && facts.every(f => /→ 예/.test(f.text)) && tr.further_checks.indexOf(items[9].text) >= 0 && /서면 체크리스트/.test(tr.official_source), '"예" 항목만 확인된 사실로, "미확인"은 추가 확인사항으로 기록', facts[0].text.substring(0, 50));
+  ok(run(ctx, `findCase_(${J(ckCase.case_id)})`).status === '조치진행', '결과 "채권 검토 필요" → 관리 건 조치진행');
+  // 서면 스캔 파일 첨부
+  vm.runInContext(`DriveApp.getFolderById(${J(rootId)}).createFile('CHECK_${ckCase.case_id}_20261028.pdf', '%PDF-(가상)', 'application/pdf')`, ctx);
+  vm.runInContext(`DriveApp.getFolderById(${J(rootId)}).createFile('CHECK_C-2099-0001_20261028.pdf', '%PDF-(가상)', 'application/pdf')`, ctx);
+  pipeline(ctx);
+  const cb = table(ctx, 'DB_RAW', 'R_BATCH').filter(b => b.source === 'CHECK_SCAN');
+  ok(cb.length === 2 && cb.filter(b => b.status === '완료').length === 1 && table(ctx, 'DB_WORK', 'T_ATTACH').some(a => a.case_id === ckCase.case_id && /체크리스트\(서면\)/.test(a.file_name) && a.locked), '서면 스캔(CHECK_*.pdf) → 관리 건 증빙 첨부(잠금), 없는 관리 건은 오류', cb.map(b => b.status).join(','));
+  // 주간 생성 주기
+  const due = run(ctx, `[snapshotDueToday_({ SNAPSHOT_FREQ: '주간', SNAPSHOT_WEEKDAY: '3' }, '정기'), snapshotDueToday_({ SNAPSHOT_FREQ: '주간', SNAPSHOT_WEEKDAY: '3' }, '수동'), snapshotDueToday_({ SNAPSHOT_FREQ: '일간', SNAPSHOT_WEEKDAY: '1' }, '정기'), dowOf_(todayStr_())]`);
+  ok(due[0] === true && due[1] === true && due[2] === true, '주간 모드: 지정 요일(수요일=오늘)·수동 실행·일간 모드에서 생성', `오늘 요일 ${due[3]}`);
+  ok(run(ctx, `snapshotDueToday_({ SNAPSHOT_FREQ: '주간', SNAPSHOT_WEEKDAY: '1' }, '정기')`) === false, '주간 모드: 다른 요일의 정기 처리에서는 생성하지 않음');
 }
 
 /* ───── 4. 가상 데이터(미수 포함) 환경에서도 회귀 없음 ───── */

@@ -612,3 +612,15 @@ function api_issueAccessCode(userId, reason) {
 function api_registerManualFolder(folderIdOrName) {
   return apiCall_('docs.manage', function (user) { var r = registerManualFolder_(user, folderIdOrName); var s = seedSituations_(user); return { registered: r, situations: s }; });
 }
+
+/* ───────────── 주간 요약(홈)·체크리스트 ───────────── */
+function api_summary() { return apiCall_('work.view', function (user) { return weeklySummary_(user); }); }
+function api_checklist(caseId) {
+  return apiCall_('work.view', function (user) {
+    var c = findCase_(caseId); requireWsAccess_(user, c.wholesaler_id);
+    var sg = readTable_('DB_WORK', 'T_SIGNAL').filter(function (s) { return s.case_id === caseId && s.status !== '해소' && s.status !== '오탐확정'; });
+    return { print: checklistPrintData_(c, sg, findWs_(c.wholesaler_id).name), resultClasses: RESULT_CLASSES, canWrite: can_(user.role, 'trend.write') };
+  });
+}
+function api_saveChecklist(o) { return apiCall_('trend.write', function (user) { return saveChecklistResult_(user, o || {}); }); }
+function api_actionGuides() { return apiCall_('work.view', function () { return actionGuides_(); }); }

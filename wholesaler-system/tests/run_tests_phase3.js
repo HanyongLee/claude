@@ -7,7 +7,7 @@ const fs = require('fs'), path = require('path'), vm = require('vm');
 const { createGas } = require('./gas_mock');
 const GAS = path.join(__dirname, '..', 'gas');
 const ORDER = ['Config.gs', 'Logic.gs', 'Db.gs', 'Audit.gs', 'Auth.gs', 'Setup.gs', 'Pipeline.gs', 'Backup.gs',
-  'Master.gs', 'Metrics.gs', 'Signals.gs', 'Work.gs', 'Docs.gs', 'Performance.gs', 'Backtest.gs', 'Qa.gs', 'Notify.gs', 'Api.gs', 'VirtualData.gs', 'TestData.gs', 'Main.gs', 'Install.gs', 'NhImport.gs', 'Snapshot.gs'];
+  'Master.gs', 'Metrics.gs', 'Signals.gs', 'Work.gs', 'Docs.gs', 'Performance.gs', 'Backtest.gs', 'Qa.gs', 'Notify.gs', 'Api.gs', 'VirtualData.gs', 'TestData.gs', 'Main.gs', 'Install.gs', 'NhImport.gs', 'Snapshot.gs', 'Checklist.gs'];
 const OWNER = 'owner@example.invalid', START = '2024-10-01', END = '2026-10-27';
 const FROZEN = new Date('2026-10-28T09:00:00+09:00').getTime();
 let tick = 0;
@@ -61,6 +61,11 @@ section('실적관리 요약');
 
 section('거래·회수 매트릭스 (시나리오: 참고용 4분면, 신호에 비연결)');
 {
+  // 기본 모드(전년 동월 증감) 확인 후, 아래 기존 검증은 구매금액 모드로 전환해 수행
+  const g = run(ctx, 'api_matrix("전체")').data;
+  ok(g.xMode === '전년동월증감' && g.boundaries.x === 0 && g.points.every(p => typeof p.x === 'number' && p.prevYearMonth !== undefined), '기본 가로축 = 마감 월 실적의 전년 동월 대비 증감률, 경계 0%', `${g.points.length}점, 제외 ${g.excluded.length}`);
+  ok(g.points.every(p => p.quadrant === (p.x >= 0 ? (p.y >= g.boundaries.y ? 'HH' : 'HL') : (p.y >= g.boundaries.y ? 'LH' : 'LL'))), '분류 = (실적 증가/감소) × (회전율 높음/낮음)');
+  run(ctx, `api_updateSetting('MATRIX_X_MODE', '당기중앙값', true, '', '테스트')`);
   const m = run(ctx, 'api_matrix("전체")').data;
   ok(m.points.length > 0 && m.excluded.length >= 2, '포함·제외 분리', `포함 ${m.points.length}, 제외 ${m.excluded.length}`);
   ok(m.excluded.some(e => e.wholesaler_id === 'W0310' && /신규/.test(e.reason)) && m.excluded.some(e => e.wholesaler_id === 'W0405' && /휴업/.test(e.reason)), '신규·휴업은 그래프 밖 목록으로', m.excluded.map(e => e.wholesaler_id + ':' + e.reason).join(', '));

@@ -357,3 +357,18 @@ function registerSituation_(user, o, reason) {
     return row;
   });
 }
+
+/**
+ * 상황별 "조치 1줄 + 조항·호·목 근거" 목록 (질의응답 대신 쓰는 안내). 절차가 없으면 확인 필요 + 근거 후보.
+ */
+function actionGuides_() {
+  var today = todayStr_();
+  return readTable_('DB_MASTER', 'M_SITUATION').filter(function (x) { return !x.is_deleted; }).map(function (x) {
+    var p = proceduresFor_(x.situation_code, today);
+    var cond = {}; try { cond = JSON.parse(x.condition_json || '{}'); } catch (e) { /* 조건 없음 */ }
+    return { situation_code: x.situation_code, label: x.label, signals: cond.signals || [], result_class: cond.result_class || '', min_overdue_days: cond.min_overdue_days || '',
+      status: p.status, message: p.message,
+      steps: p.steps.map(function (st) { return { step_no: st.step_no, action: st.content, basis: st.doc_name + ' ' + st.version + ' ' + st.article + (st.page ? ' p.' + st.page : ''), effective_from: st.effective_from, forms: st.forms.map(function (f) { return f.form_name + ' ' + f.version; }) }; }),
+      candidates: (p.candidates || []).map(function (c) { return { doc_name: c.doc_name, version: c.version, file_id: c.file_id }; }) };
+  });
+}

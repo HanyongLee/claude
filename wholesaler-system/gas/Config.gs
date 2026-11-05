@@ -5,7 +5,7 @@
 
 var APP = {
   NAME: '중도매인 통합관리',
-  VERSION: '0.6.0-hybrid',
+  VERSION: '0.7.0-weekly',
   TZ: 'Asia/Seoul',
   ROOT_FOLDER_NAME: '중도매인통합관리',
   OPEN_END: '9999-12-31',          // 종료일 미정 표시
@@ -93,7 +93,9 @@ var SCHEMA = {
       'doc_version:text', 'article:text', 'page:text'].concat(AUDIT_COLS),
     M_PROC_FORM: ['proc_step_id:text', 'form_doc_id:text', 'required:bool'].concat(AUDIT_COLS),
     // 백테스트 정답 표본: 과거 실제 사안(익명 코드·시점). 개인정보·금액은 넣지 않는다
-    M_BACKTEST_TRUTH: ['truth_id:text', 'wholesaler_id:text', 'event_date:date', 'event_type:text', 'note:text'].concat(AUDIT_COLS)
+    M_BACKTEST_TRUTH: ['truth_id:text', 'wholesaler_id:text', 'event_date:date', 'event_type:text', 'note:text'].concat(AUDIT_COLS),
+    // 이상징후 체크리스트 항목(현장 확인용). 기본 항목은 가정이며 담당자가 수정한다
+    M_CHECKLIST: ['item_id:text', 'sort_no:num', 'category:text', 'text:text', 'weight:num', 'is_assumed:bool', 'active:bool'].concat(AUDIT_COLS)
   },
   DB_PII: {
     P_GUARANTOR: ['guarantor_ref:text', 'name:text', 'relation:text', 'note:text'].concat(AUDIT_COLS)
@@ -228,7 +230,7 @@ var SETTING_DEFAULTS = [
   ['OVERDUE_DEFINITION', '원천값', '연체 정의: 원천값(원천 제공 연체금액·일수 사용) | (내부 규정 확인 후 입력)', ''],
   ['CATEGORY_AR_SPLIT', '불가', '부류별 채권 배분: 불가 | 가능(배분 근거 문서 번호)', ''],
   ['APPROVER_ROLE', 'ADMIN', '조치·종결 승인 역할(ADMIN | CREDIT_LEAD 등 사용자 역할)', ''],
-  ['MATRIX_X_MODE', '당기중앙값', '4분면 가로축(구매금액) 경계: 당기중앙값', ''],
+  ['MATRIX_X_MODE', '전년동월증감', '4분면 가로축: 전년동월증감(전년 동월 대비 실적 증감률, 경계 0%) | 당기중앙값(최근 12개월 구매금액)', ''],
   ['MATRIX_Y_MODE', '전년고정', '4분면 세로축(회전율) 경계: 당기중앙값 | 전년고정(MATRIX_Y_FIXED) | 목표값(MATRIX_Y_FIXED)', ''],
   ['MATRIX_Y_FIXED', '', '4분면 세로축 고정 경계값(회전율, 회). 비어 있으면 당기중앙값으로 대체. "기준선 재산정"으로 전년 연간 중앙값 채움', '회'],
   ['MATRIX_Y_FIXED_SOURCE', '', '세로축 고정값 출처(자동 산정 일시 또는 내부 목표 근거)', ''],
@@ -246,14 +248,32 @@ var SETTING_DEFAULTS = [
   ['LOGIN_MAX_FAIL', '5', '접속코드 연속 실패 허용 횟수(초과 시 15분 잠금)', '회'],
   ['NH_AUTO_REGISTER_WS', '예', '농협 실적 파일에 있는 미등록 중도매인을 자동 등록: 예 | 아니오(거부 행으로 남김)', ''],
   ['SNAPSHOT_ENABLED', '예', '정기 처리 후 배포용 스냅샷 HTML 생성(40_배포 폴더): 예 | 아니오', ''],
-  ['SNAPSHOT_EMAIL', '아니오', '스냅샷 HTML을 담당자 이메일로 첨부 발송: 예 | 아니오 (사내망 전달용. 금액 포함 파일이므로 조직 기준 확인 후)', '']
+  ['SNAPSHOT_EMAIL', '아니오', '스냅샷 HTML을 담당자 이메일로 첨부 발송: 예 | 아니오 (사내망 전달용. 금액 포함 파일이므로 조직 기준 확인 후)', ''],
+  ['SNAPSHOT_FREQ', '주간', '스냅샷 생성 주기: 주간 | 일간', ''],
+  ['SNAPSHOT_WEEKDAY', '1', '주간 스냅샷 생성 요일(0=일 … 6=토). 정기 처리가 이 요일에 돌 때 생성', ''],
+  ['CHECKLIST_HIGH_SCORE', '3', '체크리스트 "예" 가중 합계가 이 값 이상이면 "연체 가능성 높음" 제안(가정값)', '점']
+];
+
+/** 이상징후 체크리스트 기본 항목(가정). 중도매인 대면·경매 현장에서 확인할 수 있는 것만. 현업 확인 후 M_CHECKLIST 에서 수정 */
+var CHECKLIST_SEED = [
+  ['경매 참여', '최근 2주 경매 참여 횟수가 평소보다 눈에 띄게 줄었다', 1],
+  ['경매 참여', '낙찰 물량·단가가 평소 거래 패턴과 다르게 급감하거나 저가 위주로 바뀌었다', 1],
+  ['결제', '결제일 연기·분할 결제를 요청했거나 결제가 반복 지연되고 있다', 2],
+  ['결제', '결제 수단이 바뀌었다(현금→어음·카드 등) 또는 제3자 명의 입금이 있다', 1],
+  ['영업', '주요 납품처(소매·식당 등) 이탈이나 거래 축소 이야기가 있다', 1],
+  ['영업', '점포·창고의 재고가 비정상적으로 적거나 운영 시간이 줄었다', 1],
+  ['영업', '다른 공판장·도매시장으로 거래를 옮기고 있다는 정황이 있다', 1],
+  ['대표자', '대표자와 연락이 어렵거나 현장 부재가 잦아졌다', 2],
+  ['대표자', '직원·가족의 이탈, 건강·소송 등 영업 지속에 영향을 주는 사정이 확인됐다', 1],
+  ['담보', '담보 부동산 처분·추가 담보 설정 등 담보 관련 변동 소식이 있다', 2],
+  ['담보', '타 금융기관 연체·압류·가압류 통지 등 신용 관련 정황이 있다', 2]
 ];
 
 var MATRIX_QUADRANTS = {
-  HH: { code: 'HH', label: '핵심 유지군', desc: '구매 높음·회전율 높음' },
-  HL: { code: 'HL', label: '집중 점검군', desc: '구매 높음·회전율 낮음' },
-  LH: { code: 'LH', label: '육성 검토군', desc: '구매 낮음·회전율 높음' },
-  LL: { code: 'LL', label: '개별 진단군', desc: '구매 낮음·회전율 낮음' }
+  HH: { code: 'HH', label: '핵심 유지군', desc: '실적 증가·회전율 높음' },
+  HL: { code: 'HL', label: '집중 점검군', desc: '실적 증가·회전율 낮음 (거래는 늘고 회수는 느림)' },
+  LH: { code: 'LH', label: '육성 검토군', desc: '실적 감소·회전율 높음' },
+  LL: { code: 'LL', label: '개별 진단군', desc: '실적 감소·회전율 낮음' }
 };
 var MATRIX_DISCLAIMER = '이 분류는 관리 우선순위를 찾기 위한 참고 자료이며, 신용등급이나 거래제한 기준이 아닙니다. 신호·조치 판단에 자동으로 연결되지 않습니다.';
 

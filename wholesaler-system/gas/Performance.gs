@@ -70,7 +70,7 @@ function performanceSummary_(user) {
       var lastM = idx[ws + '|' + lastCompleteYm + '|' + c], lastPrev = idx[ws + '|' + addMonths_(lastCompleteYm, -12) + '|' + c];
       byCat[c] = {
         amount12: p12.amount, days12: p12.days, months12: p12.months,
-        lastMonth: { ym: lastCompleteYm, amount: lastM ? lastM.purchase_amount : 0, days: lastM ? lastM.purchase_days : 0, yoy: isNew ? { status: '비교불가', reason: '신규' } : growthRate_(lastM ? lastM.purchase_amount : 0, lastPrev ? lastPrev.purchase_amount : null) },
+        lastMonth: { ym: lastCompleteYm, amount: lastM ? lastM.purchase_amount : 0, days: lastM ? lastM.purchase_days : 0, prevAmount: lastPrev ? lastPrev.purchase_amount : null, yoy: isNew ? { status: '비교불가', reason: '신규' } : growthRate_(lastM ? lastM.purchase_amount : 0, lastPrev ? lastPrev.purchase_amount : null) },
         ytd: { from: yearStart, to: lastCompleteYm, amount: ytd.amount, prevAmount: ytdPrev.amount, growth: isNew ? { status: '비교불가', reason: '신규' } : growthRate_(ytd.amount, ytdPrev.months ? ytdPrev.amount : null) },
         mtd: monthComplete ? null : { ym: curYm, amount: mtd.byCategory[c].amount, prevAmount: mtd.byCategory[c].prevAmount, growth: mtd.byCategory[c].growth, basis: mtd.basis, elapsed: mtd.elapsedAuctionDays }
       };
@@ -126,6 +126,7 @@ function matrix_(user, category) {
   category = APP.CATEGORIES.indexOf(category) >= 0 ? category : APP.ALL;
   var sum = performanceSummary_(user), settings = readSettings_();
   var included = [], excluded = [];
+  var xMode = settings.MATRIX_X_MODE || '전년동월증감';   // 전년동월증감: 가로 = 마감 월 실적의 전년 동월 대비 증감률(%), 경계 0
   sum.rows.forEach(function (r) {
     var c = r.byCategory[category];
     var reason = '';
@@ -134,10 +135,13 @@ function matrix_(user, category) {
     else if (r.dataState !== '정상') reason = '판정보류(자료 불완전)';
     else if (r.turnover === null) reason = '회전율 ' + (r.turnoverInfo.reason || '산출불가');
     else if (!c.amount12) reason = '해당 부류 구매 없음';
-    var pt = { wholesaler_id: r.wholesaler_id, name: r.name, x: c.amount12, y: r.turnover, size: r.balance || 0, growth: c.ytd.growth, collectionDays: r.collectionDays, overdue: r.overdue };
+    else if (xMode === '전년동월증감' && c.lastMonth.yoy.status !== '정상') reason = '전년 동월 비교불가(' + c.lastMonth.yoy.reason + ')';
+    var x = xMode === '전년동월증감' ? c.lastMonth.yoy.value * 100 : c.amount12;
+    var pt = { wholesaler_id: r.wholesaler_id, name: r.name, x: x, y: r.turnover, size: xMode === '전년동월증감' ? c.lastMonth.amount : (r.balance || 0), amount12: c.amount12,
+      lastMonth: c.lastMonth.amount, prevYearMonth: c.lastMonth.prevAmount, growth: c.lastMonth.yoy, balance: r.balance, collectionDays: r.collectionDays, overdue: r.overdue };
     if (reason) { pt.reason = reason; excluded.push(pt); } else included.push(pt);
   });
-  var bx = median_(included.map(function (p) { return p.x; }));
+  var bx = xMode === '전년동월증감' ? 0 : median_(included.map(function (p) { return p.x; }));
   var yMode = settings.MATRIX_Y_MODE || '당기중앙값', yFixed = settingNum_(settings, 'MATRIX_Y_FIXED', NaN);
   var by, ySource;
   if ((yMode === '전년고정' || yMode === '목표값') && isFinite(yFixed) && yFixed > 0) { by = yFixed; ySource = yMode + ' (' + (settings.MATRIX_Y_FIXED_SOURCE || '출처 미기재') + ')'; }
@@ -146,8 +150,11 @@ function matrix_(user, category) {
   included.forEach(function (p) { p.quadrant = quadrantOf_(p.x, p.y, bx, by); p.quadrantLabel = MATRIX_QUADRANTS[p.quadrant].label; counts[p.quadrant]++; });
   return {
     meta: sum.meta, category: category,
-    axes: { x: '최근 12개월 구매금액(' + category + ') ' + sum.meta.period12, y: '최근 3개월 미수금 회전율(전체 기준) ' + (included[0] ? '' : ''), color: '전년 동기 누적 대비 구매 증감률(' + category + ', ' + sum.meta.ytdPeriod + ')', size: '현재 미수금(' + sum.meta.metricBaseDate + ')' },
-    boundaries: { x: bx, xSource: '당기중앙값(' + included.length + '명)', y: by, ySource: ySource, computedAt: nowStr_() },
+    xMode: xMode,
+    axes: xMode === '전년동월증감'
+      ? { x: sum.meta.lastCompleteYm + ' 사업실적의 전년 동월 대비 증감률(' + category + ')', y: '최근 3개월 미수금 회전율(전체 기준)', color: '4분면 분류', size: sum.meta.lastCompleteYm + ' 사업실적(구매금액)' }
+      : { x: '최근 12개월 구매금액(' + category + ') ' + sum.meta.period12, y: '최근 3개월 미수금 회전율(전체 기준)', color: '전년 동기 누적 대비 구매 증감률', size: '현재 미수금(' + sum.meta.metricBaseDate + ')' },
+    boundaries: { x: bx, xSource: xMode === '전년동월증감' ? '전년 동월과 같음(0%)' : '당기중앙값(' + included.length + '명)', y: by, ySource: ySource, computedAt: nowStr_() },
     quadrants: MATRIX_QUADRANTS, counts: counts, points: included, excluded: excluded, disclaimer: MATRIX_DISCLAIMER
   };
 }

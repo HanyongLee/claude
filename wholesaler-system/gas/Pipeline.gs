@@ -60,7 +60,8 @@ function runPipeline_(trigger) {
     if (state.stage === 'SNAPSHOT') {
       if (timeLeft() < 60000) return pause_(state, '스냅샷 생성을 다음 실행에서 진행');
       stageStart = nowStr_();
-      if ((readSettings_().SNAPSHOT_ENABLED || '예') === '예') buildSnapshots_(state.runId, trigger);
+      var sset = readSettings_();
+      if ((sset.SNAPSHOT_ENABLED || '예') === '예' && snapshotDueToday_(sset, trigger)) buildSnapshots_(state.runId, trigger);
     }
     PropertiesService.getScriptProperties().deleteProperty(PIPE_STATE_KEY);
     clearContinueTriggers_();
@@ -100,7 +101,7 @@ function importInbox_(runId, trigger, timeLeft) {
   var rootId = prop_('ROOT_FOLDER_ID');
   if (rootId) {
     var rit = DriveApp.getFolderById(rootId).getFiles();
-    while (rit.hasNext()) { var f = rit.next(); if (/\.(xlsx?|csv|json)$/i.test(f.getName()) || /spreadsheetml|ms-excel|text\/csv/.test(String(f.getMimeType ? f.getMimeType() : ''))) files.push(f); }
+    while (rit.hasNext()) { var f = rit.next(); if (/\.(xlsx?|csv|json|pdf|jpe?g|png)$/i.test(f.getName()) || /spreadsheetml|ms-excel|text\/csv/.test(String(f.getMimeType ? f.getMimeType() : ''))) files.push(f); }
   }
   files.sort(function (a, b) { return a.getName() < b.getName() ? -1 : 1; });
   var wsIds = {};
@@ -136,6 +137,9 @@ function importFile_(file, runId, trigger, wsIds, keyCache) {
   if (prior0) {
     batch.source = prior0.source; batch.status = '중복파일';
     batch.message = '같은 내용의 파일이 이미 처리됨(' + prior0.batch_id + ') — 건너뜀';
+  } else if (/^CHECK_.*\.(pdf|jpe?g|png)$/i.test(name)) {
+    var ck = importChecklistFile_(file, batch);
+    batch.source = 'CHECK_SCAN'; batch.status = ck.status; batch.message = ck.message; dest = ck.dest; batch.accepted_count = ck.ok ? 1 : 0; batch.rejected_count = ck.ok ? 0 : 1; batch.row_count = 1;
   } else if (/^TREND_.*\.json$/i.test(name)) {
     var tr = importTrendFile_(file, batch);
     batch.source = 'TREND_JSON'; batch.status = tr.status; batch.message = tr.message; dest = tr.dest; batch.accepted_count = tr.ok ? 1 : 0; batch.rejected_count = tr.ok ? 0 : 1; batch.row_count = 1;
@@ -264,4 +268,11 @@ function mergeStatus_(obj) {
   var m = readStatus_(), now = nowStr_();
   Object.keys(obj).forEach(function (k) { m[k] = obj[k] === undefined || obj[k] === null ? '' : String(obj[k]); });
   rewriteTable_('DB_AGG', 'A_STATUS', Object.keys(m).sort().map(function (k) { return { key: k, value: m[k], updated_at: now }; }));
+}
+
+/** 주간 모드면 지정 요일(기본 월요일)에만, 일간이면 매번. 수동 실행은 항상 생성 */
+function snapshotDueToday_(settings, trigger) {
+  if ((settings.SNAPSHOT_FREQ || '주간') === '일간') return true;
+  if (trigger && trigger.indexOf('정기') < 0) return true;
+  return dowOf_(todayStr_()) === settingNum_(settings, 'SNAPSHOT_WEEKDAY', 1);
 }

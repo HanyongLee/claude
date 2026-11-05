@@ -22,6 +22,7 @@ function setupSystem() {
       report.push('초기 관리자 등록: ' + admin.user_id);
     }
     report.push('기준값 기본(가정값) 적재: ' + seedSettings_(owner) + '건');
+    report.push('체크리스트 기본 항목(가정) 적재: ' + seedChecklist_(owner) + '건');
     setProp_('APP_VERSION', APP.VERSION);
     report.push('설정 완료. 다음: (가상 데이터) loadVirtualData → runPipeline → 웹앱 배포');
     Logger.log(report.join('\n'));

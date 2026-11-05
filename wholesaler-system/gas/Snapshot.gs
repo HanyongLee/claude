@@ -49,17 +49,74 @@ function snapshotData_(user) {
     generated_at: nowStr_(), for_user: { name: user.name, role: user.roleLabel, user_id: user.user_id }, app: { name: APP.NAME, version: APP.VERSION },
     status: { base_date: st.latest_base_date || '', data_status: st.data_status || '', status_reasons: st.status_reasons || '', last_updated: st.last_updated_at || '', ar_available: st.ar_available || '예', signal_base_date: st.signal_base_date || '' },
     meta: perf.meta, queues: queues, signals: signals, cases: cases, trends: trends, actions: actions, wholesalers: wsList,
-    matrix: { boundaries: matrix.boundaries, counts: matrix.counts, points: matrix.points, excluded: matrix.excluded, disclaimer: matrix.disclaimer, axes: matrix.axes },
+    matrix: { xMode: matrix.xMode, boundaries: matrix.boundaries, counts: matrix.counts, points: matrix.points, excluded: matrix.excluded, disclaimer: matrix.disclaimer, axes: matrix.axes, quadrants: matrix.quadrants },
     situations: situations, resultClasses: RESULT_CLASSES, rules: SIGNAL_RULES, quadrants: MATRIX_QUADRANTS,
     notes: { turnover: perf.meta.turnoverNote, partial: perf.meta.partialNote, privacy: '이 파일에는 보증인 성명·연락처·증빙·변경 이력이 들어 있지 않습니다. 파일을 받은 사람은 파일 안 자료를 모두 볼 수 있으므로 외부로 전달하지 마세요.' }
+  };
+}
+
+/**
+ * 주간 요약(웹 홈·스냅샷 공용): 이상 징후 / 동향보고 / 조치사항 세 흐름 + 4분면 + 조치 안내 + 체크리스트
+ */
+function weeklySummary_(user) {
+  var d = snapshotData_(user), today = todayStr_();
+  var byCase = {}; d.cases.forEach(function (c) { byCase[c.case_id] = c; });
+  var wsIdx = {}; d.wholesalers.forEach(function (w) { wsIdx[w.wholesaler_id] = w; });
+  // ① 이상 징후: 중도매인별로 묶음(활성 신호가 있거나 관리 건이 열려 있는 경우)
+  var sigByWs = {};
+  d.signals.forEach(function (s) { (sigByWs[s.wholesaler_id] = sigByWs[s.wholesaler_id] || []).push(s); });
+  var flagged = Object.keys(sigByWs).map(function (ws) {
+    var sg = sigByWs[ws], c = d.cases.filter(function (x) { return x.wholesaler_id === ws && x.status !== '종결'; })[0];
+    var w = wsIdx[ws] || {};
+    var latestTrend = d.trends.filter(function (t) { return c && t.case_id === c.case_id; }).sort(function (a, b) { return a.submitted_at < b.submitted_at ? 1 : -1; })[0];
+    var sev = sg.some(function (s) { return s.severity === '위험'; }) ? '위험' : sg.some(function (s) { return s.severity === '경고'; }) ? '경고' : sg.some(function (s) { return s.severity === '주의'; }) ? '주의' : '정보';
+    return { wholesaler_id: ws, name: w.name || ws, assignee: w.assignee || '', severity: sev, signals: sg, case_id: c ? c.case_id : '', case_status: c ? c.status : '', trend_due: c ? c.trend_due : '',
+      latest_trend: latestTrend ? { checked_date: latestTrend.checked_date, result_class: latestTrend.result_class, check_method: latestTrend.check_method } : null,
+      balance: w.balance, overdue: w.overdue, overdueDays: w.overdueDays, turnover: w.turnover, yoy: w.byCategory ? w.byCategory[APP.ALL].lastMonth.yoy : null, lastMonth: w.byCategory ? w.byCategory[APP.ALL].lastMonth : null };
+  }).sort(function (a, b) { var o = { '위험': 0, '경고': 1, '주의': 2, '정보': 3 }; return o[a.severity] - o[b.severity] || (b.overdue || 0) - (a.overdue || 0); });
+  // ② 동향보고: 최근 제출 + 확인 대기
+  var trendWait = d.cases.filter(function (c) { return c.status === '접수' || c.status === '동향확인중'; }).map(function (c) {
+    return { case_id: c.case_id, wholesaler_id: c.wholesaler_id, name: (wsIdx[c.wholesaler_id] || {}).name || '', auctioneer: c.auctioneer, trend_due: c.trend_due, overdue: c.trend_due && c.trend_due < today,
+      signals: (sigByWs[c.wholesaler_id] || []).map(function (s) { return s.rule_id; }) };
+  });
+  var recentTrends = d.trends.slice().sort(function (a, b) { return a.submitted_at < b.submitted_at ? 1 : -1; }).slice(0, 30).map(function (t) {
+    return Object.assign({ name: (wsIdx[(byCase[t.case_id] || {}).wholesaler_id] || {}).name || '', wholesaler_id: (byCase[t.case_id] || {}).wholesaler_id || '' }, t);
+  });
+  // ③ 조치사항: 진행 중 조치 + 승인 대기 + 재점검 + 최근 완료
+  var actions = d.actions.map(function (a) { return Object.assign({ wholesaler_id: (byCase[a.case_id] || {}).wholesaler_id || '', name: (wsIdx[(byCase[a.case_id] || {}).wholesaler_id] || {}).name || '', case_status: (byCase[a.case_id] || {}).status || '' }, a); });
+  var openActions = actions.filter(function (a) { return a.status !== '완료'; });
+  var doneActions = actions.filter(function (a) { return a.status === '완료'; }).sort(function (a, b) { return a.done_date < b.done_date ? 1 : -1; }).slice(0, 20);
+  var recheck = d.cases.filter(function (c) { return c.status === '재점검대기'; }).map(function (c) { return { case_id: c.case_id, wholesaler_id: c.wholesaler_id, name: (wsIdx[c.wholesaler_id] || {}).name || '', recheck_date: c.recheck_date, due: c.recheck_date && c.recheck_date <= today, close_reason: c.close_reason }; });
+  // 조치 안내(1줄 + 조항) 와 징후별 매칭: 상황 코드의 신호가 현재 활성 신호와 겹치면 해당
+  var guides = actionGuides_();
+  flagged.forEach(function (f) {
+    var ids = f.signals.map(function (s) { return s.rule_id; });
+    var od = (f.signals.filter(function (s) { return s.rule_id === 'S03'; })[0] || {}).evidence || {};
+    f.guides = guides.filter(function (g) {
+      if (!g.signals.length || !g.signals.every(function (r) { return ids.indexOf(r) >= 0; })) return false;
+      if (g.min_overdue_days && Number(od.overdueDays || 0) < Number(g.min_overdue_days)) return false;
+      if (g.result_class && (!f.latest_trend || f.latest_trend.result_class !== g.result_class)) return false;
+      return true;
+    }).map(function (g) { return { situation_code: g.situation_code, label: g.label, status: g.status, first: g.steps[0] || null, candidates: g.candidates }; });
+  });
+  // 체크리스트 인쇄 대상: 동향 확인 대기 관리 건
+  var checklists = trendWait.map(function (t) { var c = byCase[t.case_id]; return checklistPrintData_({ case_id: c.case_id, wholesaler_id: c.wholesaler_id, auctioneer_id: c.auctioneer, opened_date: c.opened_date, trend_due: c.trend_due }, sigByWs[c.wholesaler_id] || [], t.name); });
+  return {
+    generated_at: d.generated_at, for_user: d.for_user, app: d.app, status: d.status, meta: d.meta, notes: d.notes, resultClasses: d.resultClasses, rules: d.rules, quadrants: d.quadrants,
+    kpis: { flagged: flagged.length, flaggedHigh: flagged.filter(function (f) { return f.severity === '위험' || f.severity === '경고'; }).length, trendWait: trendWait.length, trendLate: trendWait.filter(function (t) { return t.overdue; }).length,
+      trendsThisWeek: d.trends.filter(function (t) { return t.submitted_at && t.submitted_at.substring(0, 10) >= addDays_(today, -7); }).length,
+      openActions: openActions.length, pendingApproval: openActions.filter(function (a) { return a.approval_status === '승인대기'; }).length, recheck: recheck.length, recheckDue: recheck.filter(function (r) { return r.due; }).length, wholesalers: d.wholesalers.length },
+    flagged: flagged, trendWait: trendWait, recentTrends: recentTrends, openActions: openActions, doneActions: doneActions, recheck: recheck,
+    matrix: d.matrix, guides: guides, checklists: checklists, checklistItems: checklistItems_(), wholesalers: d.wholesalers, cases: d.cases
   };
 }
 
 function snapshotHtml_(data) {
   var tpl = HtmlService.createHtmlOutputFromFile('SnapshotTemplate').getContent();
   var css = HtmlService.createHtmlOutputFromFile('Styles').getContent();
+  var view = HtmlService.createHtmlOutputFromFile('SummaryView').getContent();
   var json = JSON.stringify(data).replace(/<\/script/gi, '<\\/script');
-  return tpl.replace('<!--STYLES-->', css).replace('/*DATA*/null', json);
+  return tpl.replace('<!--STYLES-->', css).replace('<!--SUMMARYVIEW-->', view).replace('/*DATA*/null', json);
 }
 
 /** [트리거·정기 처리] 역할별 스냅샷 생성 → 40_배포 폴더. 같은 날 파일은 덮어쓴다(이름 동일 파일 삭제 후 생성) */
@@ -71,7 +128,7 @@ function buildSnapshots_(runId, trigger) {
   var mails = [];
   targets.forEach(function (t) {
     var user = snapshotUserFor_(t.id);
-    var data = snapshotData_(user);
+    var data = weeklySummary_(user);
     var html = snapshotHtml_(data);
     var name = '중도매인관리_' + stamp + '_' + t.label.replace(/[\\/:*?"<>|]/g, '_') + '.html';
     var it = folder.getFilesByName(name);
