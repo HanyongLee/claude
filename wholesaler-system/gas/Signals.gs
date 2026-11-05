@@ -47,7 +47,7 @@ function evaluateAll_(runId, trigger) {
   var limitsAll = readTable_('DB_MASTER', 'M_LIMIT');
   var balIdx = balanceIndex_(daily), dailyByWs = indexDailyByWs_(daily);
   var activeIds = wholesalers.filter(function (w) { return statusOn_(statusHist, w.wholesaler_id, base) === '정상'; }).map(function (w) { return w.wholesaler_id; });
-  var market = marketGrowth_(daily, calendar, activeIds, base);
+  var market = marketGrowth_(daily, calendar, activeIds, base, monthly);
 
   var metricRows = [], hitsByWs = {}, wsDataOk = {};
   wholesalers.forEach(function (w) {

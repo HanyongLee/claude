@@ -30,13 +30,13 @@ function putFile(ctx, folderId, name, content) { vm.runInContext(`DriveApp.getFo
 /* 농협 형식 가상 파일 생성기 (열 배치는 실제 추출 파일과 동일, 값은 가상) */
 const META = (lines) => lines.map(l => l + ',,,,,,,,,,,,,,,,,,,').join('\n') + '\n';
 function nhDaily(rows) {   // rows: [date, bigCode, bigName, ws, wsName, weight, amount, mid?, small?]
-  const head = META(['프로그램명 : [EBFW916007]농산물 공판장 취급실적 및 정산내역', '', '조합사업장 : [8808990000923] (가상)공판장(공판)', '기표/판매구분 : 기표일', '조회기간구분 : 기간(일)', '분석조건 : 소수점처리:반올림 금액:1원 수량:1개 중량:1Kg', '']);
+  const head = META(['프로그램명 : [EBFW916007]농산물 공판장 취급실적 및 정산내역', '', '조합사업장 : [8800000000000] (가상)공판장(공판)', '기표/판매구분 : 기표일', '조회기간구분 : 기간(일)', '분석조건 : 소수점처리:반올림 금액:1원 수량:1개 중량:1Kg', '']);
   const header = '번호,조직구분,사업장,사업장명,기표일자,농협대분류,농협대분류명,농협중분류,농협중분류명,농협소분류,농협소분류명,공판매매구분,공판원표구분,수입여부,파렛출하여부,중도매인,중도매인명,거래인허가번호,중량,금액(A)';
-  return head + header + '\n' + rows.map((r, i) => [i + 1, '경제지주', '8808990000923', '(가상)공판장(공판)', r[0], r[1], r[2], r[7] || '001', '(가상)중분류', r[8] || '001', '(가상)소분류', '경매', '경매', '국산', '부', r[3], r[4], r[3], r[5], `"${Number(r[6]).toLocaleString('en-US')}"`].join(',')).join('\n') + '\n';
+  return head + header + '\n' + rows.map((r, i) => [i + 1, '경제지주', '8800000000000', '(가상)공판장(공판)', r[0], r[1], r[2], r[7] || '001', '(가상)중분류', r[8] || '001', '(가상)소분류', '경매', '경매', '국산', '부', r[3], r[4], r[3], r[5], `"${Number(r[6]).toLocaleString('en-US')}"`].join(',')).join('\n') + '\n';
 }
 function nhMonthly(rows) {   // [ym, ws, wsName, weight, amount]
   const head = META(['프로그램명 : [EBFW916007]농산물 공판장 취급실적 및 정산내역', '', '조회기간구분 : 기간(월)', '']);
-  return head + '번호,조직구분,사업장,사업장명,기표년월,중도매인,중도매인명,중량,금액(A)\n' + rows.map((r, i) => [i + 1, '경제지주', '8808990000923', '(가상)공판장(공판)', r[0], r[1], r[2], r[3], `"${Number(r[4]).toLocaleString('en-US')}"`].join(',')).join('\n') + '\n';
+  return head + '번호,조직구분,사업장,사업장명,기표년월,중도매인,중도매인명,중량,금액(A)\n' + rows.map((r, i) => [i + 1, '경제지주', '8800000000000', '(가상)공판장(공판)', r[0], r[1], r[2], r[3], `"${Number(r[4]).toLocaleString('en-US')}"`].join(',')).join('\n') + '\n';
 }
 function nhCollateral(rows) {   // objects
   const title = '중도매인 담보현황 (2026. 9. 16. 기준),,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,\n,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,(단위 : 원),,,\n연번,중도매인,,,,,,중도매인 한도금액,,,,담보 내역,,,,,,,,,,,,,,,,,,,,,,,,,,,,,\n';
@@ -230,6 +230,43 @@ section('주간 요약 화면·이상징후 체크리스트·주간 스냅샷 �
   const due = run(ctx, `[snapshotDueToday_({ SNAPSHOT_FREQ: '주간', SNAPSHOT_WEEKDAY: '3' }, '정기'), snapshotDueToday_({ SNAPSHOT_FREQ: '주간', SNAPSHOT_WEEKDAY: '3' }, '수동'), snapshotDueToday_({ SNAPSHOT_FREQ: '일간', SNAPSHOT_WEEKDAY: '1' }, '정기'), dowOf_(todayStr_())]`);
   ok(due[0] === true && due[1] === true && due[2] === true, '주간 모드: 지정 요일(수요일=오늘)·수동 실행·일간 모드에서 생성', `오늘 요일 ${due[3]}`);
   ok(run(ctx, `snapshotDueToday_({ SNAPSHOT_FREQ: '주간', SNAPSHOT_WEEKDAY: '1' }, '정기')`) === false, '주간 모드: 다른 요일의 정기 처리에서는 생성하지 않음');
+}
+
+/* ───── 3d. 월별 사업실적 파일만 있는 운영 (일별·미수 자료 없음) ───── */
+section('월별 사업실적 파일만으로 운영 (실제 추출 파일 열 배치: 2024-01 ~ 마감 월)');
+{
+  const c2 = boot();
+  run(c2, `(function(){ var f = DriveApp.createFolder('2611_AI혁신센터_채권관리'); __root = f.getId(); })()`);
+  const root2 = run(c2, '__root');
+  run(c2, `setupWithFolder('2611_AI혁신센터_채권관리')`);
+  // 중도매인 6명: 전년 동월 대비 급감 2명(−60%, −45%), 완만 감소 1명, 증가 2명, 2026-08 거래 없음 1명
+  const prof = [['1', '(가상)갑', 1.0], ['2', '(가상)을', 1.0], ['3', '(가상)병', 1.0], ['4', '(가상)정', 1.0], ['5', '(가상)무', 1.0], ['6', '(가상)기', 1.0]];
+  const factor = (ws, ym) => {
+    if (ym < '2026-06') return 1.0;
+    if (ws === '1') return 0.4; if (ws === '2') return 0.55; if (ws === '3') return 0.85; if (ws === '4') return 1.3; if (ws === '5') return 1.1;
+    return ym >= '2026-08' ? 0 : 1.0;   // 6번: 2026-08 거래 없음
+  };
+  const mrows = [];
+  for (let ym = '2024-01'; ym <= '2026-08'; ym = run(c2, `addMonths_('${ym}', 1)`)) prof.forEach(w => { const f = factor(w[0], ym); if (f > 0) mrows.push([ym, w[0], w[1], 1000, Math.round(30000000 * f)]); });
+  putFile(c2, root2, '2024년~2026년8월_공판장거래인_사업실적.xlsx의 사본.csv', nhMonthly(mrows));
+  const r2 = pipeline(c2);
+  const st2 = run(c2, 'readStatus_()');
+  ok(r2.status === '완료', '정기 처리가 스냅샷까지 완료(기준일 없음으로 멈추지 않음)', r2.status);
+  ok(st2.latest_base_date === '2026-08-31' && st2.data_start === '2024-01-01' && st2.ar_available === '아니오', '기준일 = 최신 기표년월 말일, 자료 시작 = 첫 달 1일, 미수 자료 없음 표시', `${st2.latest_base_date} / ${st2.data_start} / ${st2.ar_available}`);
+  const met2 = table(c2, 'DB_AGG', 'A_METRIC').filter(m => m.category === '전체');
+  const yoy = (ws) => met2.find(m => m.wholesaler_id === ws && m.metric === '구매증감_전년');
+  const m3 = (ws) => met2.find(m => m.wholesaler_id === ws && m.metric === '구매증감_3개월');
+  const mk = (ws) => met2.find(m => m.wholesaler_id === ws && m.metric === '구매증감_시장대비');
+  ok(yoy('1') && yoy('1').status === '정상' && Math.abs(Number(yoy('1').value) - (-0.6)) < 1e-6 && /월 합계/.test(yoy('1').method), '전년 동월 비교 = 월 합계 대 월 합계(일별 자료 없음)', yoy('1') ? `${(Number(yoy('1').value) * 100).toFixed(1)}% · ${yoy('1').method}` : '지표 없음');
+  ok(m3('1') && m3('1').status === '정상' && /월평균/.test(m3('1').method), '직전 3개월 비교 = 당월 합계 ÷ 직전 3개월 월평균', m3('1') ? `${(Number(m3('1').value) * 100).toFixed(1)}% · ${m3('1').method}` : '지표 없음');
+  ok(mk('1') && mk('1').status === '정상' && Number(mk('1').value) < -0.2, '부류 전체(시장) 대비 증감 산출', mk('1') ? `${(Number(mk('1').value) * 100).toFixed(1)}%p` : '지표 없음');
+  const sig2 = table(c2, 'DB_WORK', 'T_SIGNAL');
+  ok(sig2.some(s => s.wholesaler_id === '1' && s.rule_id === 'S04') && !sig2.some(s => s.wholesaler_id === '3' && s.rule_id === 'S04'), 'S04 구매 급감 신호: 3중 조건 충족한 중도매인만(−60%·3개월·시장 대비)', sig2.map(s => s.wholesaler_id + ':' + s.rule_id).join(', ') || '신호 없음');
+  const sum2 = run(c2, 'api_summary()').data;
+  const gr = sum2.matrix.growthRank;
+  ok(sum2.matrix.points.length === 0 && gr && gr.points.length === 5 && gr.points[0].wholesaler_id === '1' && gr.idle.length === 1 && gr.idle[0].wholesaler_id === '6', '회전율 없음 → 4분면 대신 전년 동월 대비 증감 순위(거래 없는 중도매인은 따로)', gr ? `순위 ${gr.points.map(p => p.wholesaler_id + ' ' + p.x.toFixed(0) + '%').join(', ')} / 거래 없음 ${gr.idle.map(p => p.wholesaler_id).join(',')}` : '순위 없음');
+  const html2 = run(c2, `(function(){ var f = DriveApp.getFolderById(PropertiesService.getScriptProperties().getProperty('FOLDER_DEPLOY')); var it = f.getFiles(); while (it.hasNext()) { var x = it.next(); if (/전체/.test(x.getName())) return x.getBlob().getDataAsString('UTF-8'); } return ''; })()`);
+  ok(html2.indexOf('growthRank') >= 0 && html2.indexOf('(가상)갑') >= 0, '스냅샷 HTML 에 증감 순위 자료 포함');
 }
 
 /* ───── 4. 가상 데이터(미수 포함) 환경에서도 회귀 없음 ───── */

@@ -24,8 +24,32 @@
     case 'S07': return '동시 ' + (e.rules || []).join('+');
     default: return ''; } }
 
+  /** 회전율이 없을 때의 대체 그림: 전년 동월 대비 증감률 가로 막대(감소 상위 N + 증가 상위 n). 막대 하나 = 중도매인 한 명 */
+  function growthRankSvg(gr, link) {
+    var all = gr.points, N = Math.min(15, all.length), M = Math.min(5, Math.max(0, all.length - N));
+    var show = all.slice(0, N).concat(M ? all.slice(all.length - M).filter(function (p) { return p.x > 0; }) : []);
+    var W = 760, L = 150, R = 70, rowH = 22, T = 26, H = T + show.length * rowH + 12;
+    var m = 100;   // 가로 눈금은 ±100% 고정, 그 밖의 값은 끝에 붙이고 수치로만 표시
+    var X = function (v) { return L + (Math.max(-m, Math.min(m, v)) + m) / (2 * m) * (W - L - R); };
+    var svg = '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="전년 동월 대비 증감률 순위">';
+    svg += '<line x1="' + X(0) + '" x2="' + X(0) + '" y1="' + (T - 10) + '" y2="' + (H - 8) + '" stroke="var(--text-2)" stroke-dasharray="4 4"/>';
+    [-m, -m / 2, 0, m / 2, m].forEach(function (v) { svg += '<text class="axis" x="' + X(v) + '" y="' + (T - 12) + '" text-anchor="middle">' + (v > 0 ? '+' : '') + v + '%</text>'; });
+    show.forEach(function (p, i) {
+      var y = T + i * rowH, x = X(p.x), neg = p.x < 0, w = Math.abs(x - X(0));
+      svg += '<g class="pt" data-ws="' + h(p.wholesaler_id) + '"><title>' + h(p.wholesaler_id + ' ' + p.name) + '\n' + gr.ym + ' ' + won(p.lastMonth) + ' / 전년 동월 ' + won(p.prevYearMonth) + '</title>' +
+        '<text class="axis" x="' + (L - 6) + '" y="' + (y + 14) + '" text-anchor="end">' + h(p.wholesaler_id + ' ' + (p.name || '')) + '</text>' +
+        '<rect x="' + (neg ? x : X(0)) + '" y="' + (y + 3) + '" width="' + w + '" height="' + (rowH - 6) + '" rx="3" fill="' + (neg ? (p.x <= -40 ? '#e34948' : '#eda100') : '#1baf7a') + '" fill-opacity="0.8"/>' +
+        '<text class="axis" x="' + (neg ? x - 4 : x + 4) + '" y="' + (y + 14) + '" text-anchor="' + (neg ? 'end' : 'start') + '">' + (p.x > 0 ? '+' : '') + p.x.toFixed(1) + '%</text></g>';
+    });
+    svg += '</svg>';
+    return '<div class="legend"><span><i style="background:#e34948"></i>40% 이상 감소</span><span><i style="background:#eda100"></i>감소</span><span><i style="background:#1baf7a"></i>증가</span><span>' + h(gr.ym) + ' 사업실적 기준 · 감소 ' + gr.decline + '명 / 비교 가능 ' + gr.total + '명 · 감소 상위 ' + N + '명' + (M ? '과 증가 상위' : '') + ' 표시</span></div>' + svg +
+      ((gr.idle || []).length ? '<details><summary class="muted">전년 동월에는 거래가 있었으나 ' + h(gr.ym) + ' 거래가 없는 중도매인 ' + gr.idle.length + '명</summary><p class="muted">' + gr.idle.map(function (p) { return h(p.wholesaler_id + ' ' + (p.name || '')); }).join(', ') + '</p></details>' : '') +
+      '<div class="note">' + h(gr.note) + '</div>';
+  }
+
   function matrixSvg(mx, link) {
     var pts = mx.points || [];
+    if (!pts.length && mx.growthRank && mx.growthRank.points.length) return growthRankSvg(mx.growthRank, link);
     if (!pts.length) return '<p class="muted">분류할 점이 없습니다' + (mx.excluded && mx.excluded.length ? ' (제외 ' + mx.excluded.length + '명: ' + h(mx.excluded[0].reason) + ' 등)' : '') + '.</p>';
     var W = 760, H = 420, L = 56, R = 16, T = 16, B = 40, growthMode = mx.xMode === '전년동월증감';
     var xs = pts.map(function (p) { return p.x; }), ys = pts.map(function (p) { return p.y; });

@@ -62,7 +62,7 @@ function continueBacktest_(timeBudgetMs, trigger) {
       if (Date.now() - t0 > timeBudgetMs) break;
       var d = dates[i];
       var active = wholesalers.filter(function (w) { return statusOn_(statusHist, w.wholesaler_id, d) === '정상'; }).map(function (w) { return w.wholesaler_id; });
-      var market = marketGrowth_(daily, calendar, active, d);
+      var market = marketGrowth_(daily, calendar, active, d, monthly);
       wholesalers.forEach(function (w) {
         var ws = w.wholesaler_id;
         if (w.trade_start_date && w.trade_start_date > d) return;

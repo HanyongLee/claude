@@ -634,6 +634,26 @@ function growthRate_(cur, prev) {
   return { status: '정상', value: Number(cur) / Number(prev) - 1 };
 }
 
+/**
+ * 월별 자료만 있을 때의 전년 동월 비교(월 합계 대 월 합계). 기준 월 행이 없으면 null.
+ * mtdCompare_ 와 같은 구조를 돌려주며 elapsedAuctionDays 는 0(경매일 환산 불가).
+ */
+function monthlyOnlyCompare_(monthlyRows, ws, baseDate) {
+  var ym = ymOf_(baseDate), pym = addMonths_(ym, -12), any = false;
+  var res = { basis: '월 합계(월별 사업실적)', elapsedAuctionDays: 0, prevPeriod: pym + '-01~' + monthEnd_(pym), byCategory: {}, monthlyOnly: true };
+  APP.CATEGORIES.concat([APP.ALL]).forEach(function (c) {
+    var cur = null, prev = null;
+    (monthlyRows || []).forEach(function (r) {
+      if (r.wholesaler_id !== ws || r.category !== c) return;
+      if (r.ym === ym) cur = (cur || 0) + (Number(r.purchase_amount) || 0);
+      else if (r.ym === pym) prev = (prev || 0) + (Number(r.purchase_amount) || 0);
+    });
+    if (cur !== null) any = true;
+    res.byCategory[c] = { amount: cur || 0, prevAmount: prev || 0, growth: growthRate_(cur || 0, prev) };
+  });
+  return any ? res : null;
+}
+
 /** 진행 중인 월: 당월 경과 경매일 수 k 만큼 전년 같은 달 처음 k 경매일과 비교 */
 function mtdCompare_(dailyRows, calendar, ws, baseDate) {
   var ym = ymOf_(baseDate), pym = addMonths_(ym, -12);

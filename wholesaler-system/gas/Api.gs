@@ -455,7 +455,7 @@ function api_simulateSettings(overrides) {
     var statusHist = readTable_('DB_MASTER', 'M_WS_STATUS_HIST'), limitsAll = readTable_('DB_MASTER', 'M_LIMIT'), balIdx = balanceIndex_(daily);
     var wholesalers = readTable_('DB_MASTER', 'M_WHOLESALER').filter(function (w) { return !w.is_deleted; });
     var active = wholesalers.filter(function (w) { return statusOn_(statusHist, w.wholesaler_id, base) === '정상'; }).map(function (w) { return w.wholesaler_id; });
-    var market = marketGrowth_(daily, calendar, active, base), counts = {}, perWs = [];
+    var market = marketGrowth_(daily, calendar, active, base, monthly), counts = {}, perWs = [];
     wholesalers.forEach(function (w) {
       var m = computeMetrics_({ ws: w.wholesaler_id, baseDate: base, daily: daily, monthly: monthly, calendar: calendar, limits: asOfVersions_(limitsAll, 'limit_id', w.wholesaler_id, base),
         balByDate: balIdx[w.wholesaler_id] || {}, tradeStart: w.trade_start_date, settings: settings, marketGrowth: market });

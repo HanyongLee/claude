@@ -49,7 +49,7 @@ function snapshotData_(user) {
     generated_at: nowStr_(), for_user: { name: user.name, role: user.roleLabel, user_id: user.user_id }, app: { name: APP.NAME, version: APP.VERSION },
     status: { base_date: st.latest_base_date || '', data_status: st.data_status || '', status_reasons: st.status_reasons || '', last_updated: st.last_updated_at || '', ar_available: st.ar_available || '예', signal_base_date: st.signal_base_date || '' },
     meta: perf.meta, queues: queues, signals: signals, cases: cases, trends: trends, actions: actions, wholesalers: wsList,
-    matrix: { xMode: matrix.xMode, boundaries: matrix.boundaries, counts: matrix.counts, points: matrix.points, excluded: matrix.excluded, disclaimer: matrix.disclaimer, axes: matrix.axes, quadrants: matrix.quadrants },
+    matrix: { xMode: matrix.xMode, growthRank: matrix.growthRank || null, boundaries: matrix.boundaries, counts: matrix.counts, points: matrix.points, excluded: matrix.excluded, disclaimer: matrix.disclaimer, axes: matrix.axes, quadrants: matrix.quadrants },
     situations: situations, resultClasses: RESULT_CLASSES, rules: SIGNAL_RULES, quadrants: MATRIX_QUADRANTS,
     notes: { turnover: perf.meta.turnoverNote, partial: perf.meta.partialNote, privacy: '이 파일에는 보증인 성명·연락처·증빙·변경 이력이 들어 있지 않습니다. 파일을 받은 사람은 파일 안 자료를 모두 볼 수 있으므로 외부로 전달하지 마세요.' }
   };

@@ -121,20 +121,28 @@ function computeMetrics_(p) {
   else ok('한도사용률', APP.ALL, balance / applicable.amount, balance, applicable.amount, latestDate, latestDate, applicable.method);
 
   // 구매 증감 (S04): 당월 동일 경과 경매일, 직전 3개월 평균, 부류 전체 대비
+  // 일별 자료가 없고 월별 사업실적만 있는 운영에서는 월 합계끼리 비교한다(기준일 = 최신 월 말일)
   var mtd = mtdCompare_(p.daily, p.calendar, ws, base);
+  var monthlyOnly = !(p.daily || []).length && monthlyOnlyCompare_(p.monthly, ws, base);
+  if (monthlyOnly) mtd = monthlyOnly;
   APP.CATEGORIES.concat([APP.ALL]).forEach(function (c) {
     var g = mtd.byCategory[c];
     if (isNew) { na('구매증감_전년', c, '비교불가', '신규'); return; }
     if (g.growth.status !== '정상') na('구매증감_전년', c, '비교불가', g.growth.reason, mtd.prevPeriod);
     else ok('구매증감_전년', c, g.growth.value, g.amount, g.prevAmount, mtd.prevPeriod, base, mtd.basis);
-    // 직전 3개월 평균 대비: 당월 경과 경매일 수 × (직전 3개월 일평균)
-    var ym = ymOf_(base), sum = 0, days = 0;
+    var ym = ymOf_(base), sum = 0, days = 0, months = 0;
     for (var k = 1; k <= 3; k++) {
       var m = p.monthly.filter(function (r) { return r.wholesaler_id === ws && r.ym === addMonths_(ym, -k) && r.category === c; })[0];
-      if (m) { sum += Number(m.purchase_amount) || 0; days += Number(m.auction_days) || 0; }
+      if (m) { sum += Number(m.purchase_amount) || 0; days += Number(m.auction_days) || 0; months++; }
     }
-    if (!days || !mtd.elapsedAuctionDays) na('구매증감_3개월', c, '비교불가', '비교기간 자료 없음');
+    if (monthlyOnly) {
+      // 월별 자료만: 당월 합계 ÷ 직전 3개월 월평균
+      if (!months) na('구매증감_3개월', c, '비교불가', '비교기간 자료 없음');
+      else if (sum <= 0) na('구매증감_3개월', c, '비교불가', '직전 3개월 실적 0');
+      else ok('구매증감_3개월', c, g.amount / (sum / months) - 1, g.amount, Math.round(sum / months), addMonths_(ym, -3) + '-01', monthEnd_(addMonths_(ym, -1)), '직전 ' + months + '개월 월평균(월별 자료)');
+    } else if (!days || !mtd.elapsedAuctionDays) na('구매증감_3개월', c, '비교불가', '비교기간 자료 없음');
     else {
+      // 직전 3개월 평균 대비: 당월 경과 경매일 수 × (직전 3개월 일평균)
       var expected = sum / days * mtd.elapsedAuctionDays;
       if (expected <= 0) na('구매증감_3개월', c, '비교불가', '직전 3개월 실적 0');
       else ok('구매증감_3개월', c, g.amount / expected - 1, g.amount, Math.round(expected), addMonths_(ym, -3) + '-01', monthEnd_(addMonths_(ym, -1)), '동일 경과 경매일 환산');
@@ -161,11 +169,11 @@ function applicableLimit_(limits, mode) {
 }
 
 /** 부류 전체(시장) 증감률: 모든 영업 중 중도매인의 당월 동일 경과일 합계 vs 전년 */
-function marketGrowth_(daily, calendar, wsIds, baseDate) {
-  var tot = {}, byWs = indexDailyByWs_(daily);
+function marketGrowth_(daily, calendar, wsIds, baseDate, monthly) {
+  var tot = {}, byWs = indexDailyByWs_(daily), monthlyOnly = !(daily || []).length && (monthly || []).length > 0;
   APP.CATEGORIES.concat([APP.ALL]).forEach(function (c) { tot[c] = { cur: 0, prev: 0 }; });
   wsIds.forEach(function (ws) {
-    var m = mtdCompare_(byWs[ws] || [], calendar, ws, baseDate);
+    var m = (monthlyOnly && monthlyOnlyCompare_(monthly, ws, baseDate)) || mtdCompare_(byWs[ws] || [], calendar, ws, baseDate);
     APP.CATEGORIES.concat([APP.ALL]).forEach(function (c) { tot[c].cur += m.byCategory[c].amount; tot[c].prev += m.byCategory[c].prevAmount; });
   });
   var out = {};

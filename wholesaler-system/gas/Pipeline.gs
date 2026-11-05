@@ -61,7 +61,10 @@ function runPipeline_(trigger) {
       if (timeLeft() < 60000) return pause_(state, '스냅샷 생성을 다음 실행에서 진행');
       stageStart = nowStr_();
       var sset = readSettings_();
-      if ((sset.SNAPSHOT_ENABLED || '예') === '예' && snapshotDueToday_(sset, trigger)) buildSnapshots_(state.runId, trigger);
+      if ((sset.SNAPSHOT_ENABLED || '예') === '예' && snapshotDueToday_(sset, trigger)) {
+        // 스냅샷 생성 실패는 작업 이력에 남기고 정기 처리 자체는 완료시킨다(다음 실행·수동 생성에서 재시도)
+        try { buildSnapshots_(state.runId, trigger); } catch (se) { logJob_(state.runId, 'SNAPSHOT', '실패', stageStart, 0, 1, String(se.message || se), trigger); }
+      }
     }
     PropertiesService.getScriptProperties().deleteProperty(PIPE_STATE_KEY);
     clearContinueTriggers_();
@@ -236,7 +239,13 @@ function aggregateAll_(runId, trigger) {
   // 미수 잔액 자료가 없는 운영(농협 실적 파일만)에서는 최신 기표일을 기준일로 쓴다
   if (!agg.latestBase) {
     agg.latestBase = sales.reduce(function (mx, r) { return r.txn_date > mx ? r.txn_date : mx; }, '');
+    // 월별 사업실적만 있으면 최신 기표년월의 말일을 기준일로 쓴다(일별·잔액 자료가 들어오면 그 날짜가 우선)
+    if (!agg.latestBase && salesMonthly.length) agg.latestBase = monthEnd_(salesMonthly.reduce(function (mx, r) { return r.ym > mx ? r.ym : mx; }, ''));
     agg.arMissing = true;
+  }
+  if (!agg.dataStart) {
+    agg.dataStart = sales.reduce(function (mn, r) { return !mn || r.txn_date < mn ? r.txn_date : mn; }, '');
+    if (!agg.dataStart && salesMonthly.length) agg.dataStart = salesMonthly.reduce(function (mn, r) { return !mn || r.ym < mn ? r.ym : mn; }, '') + '-01';
   }
   var st = overallDataStatus_({
     latestBase: agg.latestBase,

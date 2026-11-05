@@ -165,7 +165,20 @@ function matrix_(user, category) {
   else { by = median_(included.map(function (p) { return p.y; })); ySource = '당기중앙값' + (yMode !== '당기중앙값' ? ' (고정값 미설정으로 대체)' : ''); }
   var counts = { HH: 0, HL: 0, LH: 0, LL: 0 };
   included.forEach(function (p) { p.quadrant = quadrantOf_(p.x, p.y, bx, by); p.quadrantLabel = MATRIX_QUADRANTS[p.quadrant].label; counts[p.quadrant]++; });
+  // 미수 자료가 없어 회전율을 셀 수 없는 동안: 가로축(전년 동월 대비 증감)만으로 실적 변동 순위를 제공한다(4분면 대신 표시)
+  var growthRank = null;
+  if (!included.length && xMode === '전년동월증감') {
+    var cmp = excluded.filter(function (p) { return /^회전율/.test(p.reason) && p.growth && p.growth.status === '정상'; });
+    var idle = cmp.filter(function (p) { return !(p.lastMonth > 0); });   // 전년 동월엔 거래가 있었으나 마감 월 거래가 없는 중도매인(−100%)은 순위에서 빼고 따로 센다
+    var gr = cmp.filter(function (p) { return p.lastMonth > 0; })
+      .map(function (p) { return { wholesaler_id: p.wholesaler_id, name: p.name, x: p.x, lastMonth: p.lastMonth, prevYearMonth: p.prevYearMonth, size: p.size }; })
+      .sort(function (a, b) { return a.x - b.x; });
+    if (gr.length) growthRank = { ym: sum.meta.lastCompleteYm, points: gr, total: gr.length, decline: gr.filter(function (p) { return p.x < 0; }).length,
+      idle: idle.map(function (p) { return { wholesaler_id: p.wholesaler_id, name: p.name, prevYearMonth: p.prevYearMonth }; }),
+      note: '미수잔액·입금 자료가 없어 세로축(회전율)을 셀 수 없습니다. 자료가 들어오면 4분면으로 바뀝니다.' };
+  }
   return {
+    growthRank: growthRank,
     meta: sum.meta, category: category,
     xMode: xMode,
     axes: xMode === '전년동월증감'
