@@ -723,12 +723,20 @@ function pageCase(caseId) {
     }
     html += '</div>';
     // 조치
-    html += '<div class="card"><h2>조치·승인</h2>' + table([{ t: '유형', k: 'action_type' }, { t: '내용', k: 'content', wrap: true }, { t: '담당', k: 'owner_name' }, { t: '기한', k: 'due_date' }, { t: '승인', f: function (a) { return a.needs_approval ? badge(a.approval_status) : '<span class="muted">불필요</span>'; } },
+    html += '<div class="card"><h2>조치·승인</h2>' + table([{ t: '유형', f: function (a) { return h(a.action_type) + (Number(a.dunning_round) >= 1 ? ' <span class="badge b-warn">' + h(a.dunning_round) + '차</span>' + (a.sent_date ? '<br><span class="muted">발송 ' + h(a.sent_date) + ' · ' + h(a.sent_method) + '</span>' : '<br><span class="muted">' + h(a.sent_method) + ' 예정</span>') : ''); } }, { t: '내용', k: 'content', wrap: true }, { t: '담당', k: 'owner_name' }, { t: '기한', k: 'due_date' }, { t: '승인', f: function (a) { return a.needs_approval ? badge(a.approval_status) : '<span class="muted">불필요</span>'; } },
       { t: '상태', f: function (a) { return badge(a.status) + (a.done_date ? '<br><span class="muted">' + h(a.done_date) + '</span>' : ''); } }, { t: '결과', k: 'result', wrap: true },
       { t: '', f: function (a) { if (!can('case.manage') || a.status === '완료') return ''; var b = ''; if (a.needs_approval && a.approval_status === '미요청') b += '<button data-req="' + h(a.action_id) + '">승인 요청</button> '; if (a.needs_approval && a.approval_status === '반려') b += '<button data-req="' + h(a.action_id) + '">재요청</button> '; if (!a.needs_approval || a.approval_status === '승인') b += '<button class="primary" data-done="' + h(a.action_id) + '">결과 등록</button> '; b += '<button data-final="' + h(a.action_id) + '">제출본 첨부</button>'; return b; } }], d.actions, { empty: '등록된 조치 없음' });
     if (can('case.manage') && c.status !== '종결' && c.status !== '재점검대기') {
-      html += '<h3>조치 등록</h3><form class="f" id="af"><label>조치 유형*<select name="action_type">' + d.actionTypes.map(function (a) { return '<option value="' + h(a.type) + '">' + h(a.type) + (a.needsApproval ? ' (승인 필요)' : '') + '</option>'; }).join('') + '</select></label>' +
-        '<label>처리 기한*<input type="date" name="due_date" required></label><label>상황 코드<input name="situation_code" value="' + h((g.situations[0] || {}).situation_code || '') + '"></label><label class="full">조치 내용*<textarea name="content" required></textarea></label><div class="full"><button class="primary">등록</button></div></form>';
+      var dunHist = (d.dunning && d.dunning.history || []);
+      html += '<h3>조치 등록</h3>' + (dunHist.length ? '<p class="muted" style="font-size:12.5px">이 중도매인 독촉 이력: ' + dunHist.map(function (x) { return x.round + '차 ' + (x.sent_date || '발송 전') + '(' + x.sent_method + ')'; }).join(' → ') + '</p>' : '') +
+        '<form class="f" id="af"><label>조치 유형*<select name="action_type">' + d.actionTypes.map(function (a) { return '<option value="' + h(a.type) + '"' + (a.dunning ? ' data-dun="1"' : '') + '>' + h(a.type) + (a.needsApproval ? ' (승인 필요)' : '') + '</option>'; }).join('') + '</select></label>' +
+        '<label>처리 기한*<input type="date" name="due_date" required></label><label>상황 코드<input name="situation_code" value="' + h((g.situations[0] || {}).situation_code || '') + '"></label>' +
+        '<label class="dun" style="display:none">독촉 차수<input type="number" name="dunning_round" min="1" value="' + h(d.dunning ? d.dunning.next : 1) + '"></label>' +
+        '<label class="dun" style="display:none">발송 방법*<select name="sent_method">' + (d.dunning ? d.dunning.methods : []).map(function (m) { return '<option>' + h(m) + '</option>'; }).join('') + '</select></label>' +
+        '<label class="dun" style="display:none">발송일 (비우면 결과 등록일)<input type="date" name="sent_date"></label>' +
+        '<label class="full">조치 내용*<textarea name="content" required></textarea></label>' +
+        (d.dunning ? '<div class="full dun note" style="display:none">' + h(d.dunning.note) + '</div>' : '') +
+        '<div class="full"><button class="primary">등록</button></div></form>';
       if (c.status !== '접수' && c.status !== '동향확인중') html += '<h3>종결</h3><form class="f" id="cf"><label>종결 사유*<select name="reason">' + ['해소 확인', '일시적 변화로 확인', '조치 완료', '거래 종료', '기타'].map(function (r) { return '<option>' + r + '</option>'; }).join('') + '</select></label><label>재점검일 (비우면 +30일 가정값)<input type="date" name="recheck"></label><label class="full">요약<input name="summary"></label><div class="full"><button class="danger">종결(재점검 대기로)</button> <span class="muted">열린 조치가 있거나 승인 미완료면 종결할 수 없습니다.</span></div></form>';
     }
     if (can('case.manage') && c.status === '재점검대기') html += '<div class="row"><button class="primary" id="recheck">재점검 실행</button><span class="muted">활성 신호가 없으면 종결, 있으면 동향 확인으로 재개합니다.</span></div>';
@@ -754,7 +762,13 @@ function pageCase(caseId) {
       document.getElementById('tfDraft').onclick = function () { call('api_saveTrend', collect(), false).then(function () { reload('임시 저장'); }).catch(err); };
       document.getElementById('tfSubmit').onclick = function () { if (!confirm('제출하면 관리 건 상태가 바뀝니다. 제출할까요?')) return; call('api_saveTrend', collect(), true).then(function () { reload('제출 완료'); }).catch(err); };
     }
-    var af = document.getElementById('af'); if (af) af.onsubmit = function (e) { e.preventDefault(); var o = formData(af); o.case_id = caseId; call('api_createAction', o).then(function () { reload('조치 등록'); }).catch(err); };
+    var af = document.getElementById('af');
+    if (af) {
+      var atSel = af.querySelector('select[name=action_type]');
+      var updDun = function () { var on = !!atSel.selectedOptions[0].getAttribute('data-dun'); Array.prototype.forEach.call(af.querySelectorAll('.dun'), function (el) { el.style.display = on ? '' : 'none'; }); };
+      atSel.onchange = updDun; updDun();
+      af.onsubmit = function (e) { e.preventDefault(); var o = formData(af); o.case_id = caseId; if (!atSel.selectedOptions[0].getAttribute('data-dun')) { delete o.dunning_round; delete o.sent_method; delete o.sent_date; } call('api_createAction', o).then(function () { reload('조치 등록'); }).catch(err); };
+    }
     var cf = document.getElementById('cf'); if (cf) cf.onsubmit = function (e) { e.preventDefault(); var o = formData(cf); call('api_closeCase', caseId, o.reason, o.recheck, o.summary).then(function () { reload('종결 처리'); }).catch(err); };
     var rk = document.getElementById('recheck'); if (rk) rk.onclick = function () { call('api_recheckCase', caseId, prompt('재점검 메모(선택)') || '').then(function (r) { reload(r.reopened ? '활성 신호가 있어 재개했습니다' : '종결했습니다'); }).catch(err); };
     document.getElementById('view').onclick = function (e) {

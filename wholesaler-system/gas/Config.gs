@@ -157,7 +157,8 @@ var SCHEMA = {
       'recheck_date:date', 'official_source:text', 'submitted_at:datetime'].concat(AUDIT_COLS),
     T_ACTION: ['action_id:text', 'case_id:text', 'wholesaler_id:text', 'action_type:text', 'owner_id:text', 'due_date:date',
       'content:text', 'needs_approval:bool', 'approval_status:text', 'status:text', 'result:text', 'done_date:date',
-      'attach_ids:text', 'situation_code:text'].concat(AUDIT_COLS),
+      'attach_ids:text', 'situation_code:text'].concat(AUDIT_COLS)
+      .concat(['dunning_round:num', 'sent_method:text', 'sent_date:date']),   // 독촉 이력(끝에 추가해 기존 시트 자동 이관)
     T_APPROVAL: ['approval_id:text', 'action_id:text', 'case_id:text', 'basis_snapshot_id:text', 'requested_by:text',
       'requested_at:datetime', 'decided_by:text', 'decided_at:datetime', 'decision:text', 'reason:text'],
     // 판단 근거 스냅샷: 승인 요청·종결 시점의 참조값 묶음. 수정 불가
@@ -289,9 +290,16 @@ var SIGNAL_RULES = {
 
 var CASE_STATUS = ['접수', '동향확인중', '확인완료', '조치진행', '승인대기', '재점검대기', '종결'];
 var RESULT_CLASSES = ['일시적 변화', '지속 관찰', '채권 검토 필요', '판정 보류(자료 부족)'];
+/** 독촉 발송 방법과 단계 안내 — [확인 필요] 내부 규정의 독촉 절차·서식으로 교체 */
+var DUNNING = {
+  METHODS: ['전화', '문자·카톡', '우편(일반)', '내용증명', '대면'],
+  ESCALATION_NOTE: '[가정] 1차 일반 독촉 → 2차 재독촉 → 3차 내용증명. 3차 이후에도 미이행 시 법적 조치 검토(매뉴얼 조항 근거 확인).'
+};
+
 var ACTION_TYPES = [   // [확인 필요] 내부 조치 유형 목록으로 교체. needsApproval 은 거래제한·한도변경은 항상 true
   { type: '결제 독려', needsApproval: false },
   { type: '결제계획 확인', needsApproval: false },
+  { type: '독촉장 발송', needsApproval: false, dunning: true },   // 차수·발송 방법·발송일을 구조화해 기록
   { type: '추가 담보 요청', needsApproval: true },
   { type: '한도 조정 요청', needsApproval: true },
   { type: '거래 조건 변경 요청', needsApproval: true },

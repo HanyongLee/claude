@@ -127,15 +127,33 @@ function actionTypeDef_(type) {
   return d;
 }
 
+/** 중도매인 기준 독촉 이력과 다음 차수(관리 건이 바뀌어도 차수는 이어진다) */
+function dunningStatus_(wsId) {
+  var hist = readTable_('DB_WORK', 'T_ACTION')
+    .filter(function (a) { return a.wholesaler_id === wsId && Number(a.dunning_round) >= 1 && !a.is_deleted; })
+    .map(function (a) { return { round: Number(a.dunning_round), sent_date: a.sent_date || '', sent_method: a.sent_method || '', status: a.status, case_id: a.case_id, action_id: a.action_id }; })
+    .sort(function (x, y) { return x.round - y.round; });
+  var next = hist.reduce(function (mx, h) { return Math.max(mx, h.round); }, 0) + 1;
+  return { history: hist, next: next, methods: DUNNING.METHODS, note: DUNNING.ESCALATION_NOTE };
+}
+
 function createAction_(user, o) {
   var c = findCase_(requireText_(o.case_id, '관리건ID'));
   if (c.status === '종결') throw new Error('종결된 관리 건입니다.');
   var def = actionTypeDef_(requireText_(o.action_type, '조치 유형'));
   requireText_(o.content, '조치 내용'); requireText_(o.due_date, '처리 기한'); optDate_(o.due_date, '처리 기한');
+  var dun = { dunning_round: '', sent_method: '', sent_date: '' };
+  if (def.dunning) {   // 독촉: 차수는 중도매인 기준 자동 증가(수정 가능), 발송 방법 필수, 발송일은 완료 시 자동 보정
+    var round = o.dunning_round !== undefined && o.dunning_round !== '' ? Number(o.dunning_round) : dunningStatus_(c.wholesaler_id).next;
+    if (!(round >= 1 && round === Math.floor(round))) throw new Error('독촉 차수는 1 이상의 정수입니다.');
+    if (DUNNING.METHODS.indexOf(o.sent_method) < 0) throw new Error('발송 방법을 선택하세요: ' + DUNNING.METHODS.join(', '));
+    dun = { dunning_round: round, sent_method: o.sent_method, sent_date: optDate_(o.sent_date, '발송일') || '' };
+  }
   return withLock_(function () {
     var row = { action_id: uid_('AC'), case_id: c.case_id, wholesaler_id: c.wholesaler_id, action_type: def.type,
       owner_id: o.owner_id || user.user_id, due_date: o.due_date, content: o.content, needs_approval: def.needsApproval || !!o.needs_approval,
-      approval_status: '미요청', status: '진행', result: '', done_date: '', attach_ids: '', situation_code: o.situation_code || '' };
+      approval_status: '미요청', status: '진행', result: '', done_date: '', attach_ids: '', situation_code: o.situation_code || '',
+      dunning_round: dun.dunning_round, sent_method: dun.sent_method, sent_date: dun.sent_date };
     Object.assign(row, newAuditFields_(user));
     appendObjects_('DB_WORK', 'T_ACTION', [row]);
     audit_(user, 'CREATE', 'DB_WORK', 'T_ACTION', row.action_id, null, row, '조치 등록');
@@ -202,6 +220,7 @@ function completeAction_(user, actionId, result, doneDate) {
     if (a.needs_approval && a.approval_status !== '승인') throw new Error('승인이 완료되지 않은 조치는 결과를 등록할 수 없습니다(' + a.approval_status + ').');
     var before = JSON.parse(JSON.stringify(a));
     a.status = '완료'; a.result = result; a.done_date = doneDate;
+    if (Number(a.dunning_round) >= 1 && !a.sent_date) a.sent_date = doneDate;   // 독촉 완료 = 발송 완료
     a.updated_at = nowStr_(); a.updated_by = user.user_id; a.row_version = Number(a.row_version) + 1;
     writeObject_('DB_WORK', 'T_ACTION', a);
     audit_(user, 'COMPLETE', 'DB_WORK', 'T_ACTION', actionId, before, a, '조치 결과 등록');
@@ -298,7 +317,8 @@ function caseDetail_(user, caseId) {
   out.canWriteTrend = can_(user.role, 'trend.write') && (user.role !== 'AUCTIONEER' || !c.auctioneer_id || c.auctioneer_id === user.user_id);
   var guide = procedureGuide_(c, signals, trends, actions);
   return { caseRow: out, signals: signals, trends: trends, actions: actions, approvals: approvals, history: hist, attachments: attach,
-    basis: basis, basisList: allBasis, guide: guide, resultClasses: RESULT_CLASSES, actionTypes: ACTION_TYPES, today: todayStr_() };
+    basis: basis, basisList: allBasis, guide: guide, resultClasses: RESULT_CLASSES, actionTypes: ACTION_TYPES,
+    dunning: dunningStatus_(out.wholesaler_id), today: todayStr_() };
 }
 
 function basisView_(b) {

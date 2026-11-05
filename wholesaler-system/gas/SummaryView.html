@@ -136,11 +136,11 @@
     ], d.recentTrends, '제출된 보고 없음') + '</div></section>';
     // ③ 조치
     html += '<section id="tab-action" class="tabpane hidden"><div class="card"><h2>진행 중 조치</h2>' + table([
-      { t: '관리 건', f: function (a) { return link.cs(a.case_id); } }, { t: '중도매인', f: function (a) { return link.ws(a.wholesaler_id, a.name); } }, { t: '조치', k: 'action_type' }, { t: '내용', k: 'content', wrap: true }, { t: '담당', k: 'owner' }, { t: '기한', k: 'due_date' }, { t: '승인', f: function (a) { return badge(a.approval_status); } }
+      { t: '관리 건', f: function (a) { return link.cs(a.case_id); } }, { t: '중도매인', f: function (a) { return link.ws(a.wholesaler_id, a.name); } }, { t: '조치', f: function (a) { return h(a.action_type) + (Number(a.dunning_round) >= 1 ? ' ' + badge(a.dunning_round + '차') : ''); } }, { t: '내용', k: 'content', wrap: true }, { t: '담당', k: 'owner' }, { t: '기한', k: 'due_date' }, { t: '승인', f: function (a) { return badge(a.approval_status); } }
     ], d.openActions, '진행 중 조치 없음') + '<h2 style="margin-top:14px">재점검 예정</h2>' + table([
       { t: '관리 건', f: function (r) { return link.cs(r.case_id); } }, { t: '중도매인', f: function (r) { return link.ws(r.wholesaler_id, r.name); } }, { t: '종결 사유', k: 'close_reason' }, { t: '재점검일', f: function (r) { return h(r.recheck_date) + (r.due ? ' ' + badge('도래') : ''); } }
     ], d.recheck, '없음') + '<h2 style="margin-top:14px">최근 완료</h2>' + table([
-      { t: '완료', k: 'done_date' }, { t: '관리 건', f: function (a) { return link.cs(a.case_id); } }, { t: '중도매인', f: function (a) { return link.ws(a.wholesaler_id, a.name); } }, { t: '조치', k: 'action_type' }, { t: '결과', k: 'result', wrap: true }
+      { t: '완료', k: 'done_date' }, { t: '관리 건', f: function (a) { return link.cs(a.case_id); } }, { t: '중도매인', f: function (a) { return link.ws(a.wholesaler_id, a.name); } }, { t: '조치', f: function (a) { return h(a.action_type) + (Number(a.dunning_round) >= 1 ? ' ' + badge(a.dunning_round + '차') + ' <span class="muted">' + h(a.sent_method || '') + '</span>' : ''); } }, { t: '결과', k: 'result', wrap: true }
     ], d.doneActions, '없음') + '</div></section>';
     // 조치 안내
     html += '<section id="tab-guide" class="tabpane hidden"><div class="card"><div class="note">상황별 조치 1줄과 매뉴얼 조항·호·목 근거입니다. 조항이 등록되지 않은 상황은 "확인 필요"로 표시하며 절차를 임의로 만들지 않습니다.</div>' + table([

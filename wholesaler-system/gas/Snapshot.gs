@@ -30,7 +30,7 @@ function snapshotData_(user) {
   var trends = readTable_('DB_WORK', 'T_TREND').filter(function (t) { return mine[t.wholesaler_id] && t.status === '제출'; })
     .map(function (t) { return { case_id: t.case_id, version: t.version, checked_date: t.checked_date, check_method: t.check_method, result_class: t.result_class, facts: JSON.parse(t.facts_json || '[]').map(function (f) { return f.text; }), writer: names[t.writer_id] || '', submitted_at: t.submitted_at, official_source: t.official_source }; });
   var actions = readTable_('DB_WORK', 'T_ACTION').filter(function (a) { return mine[a.wholesaler_id] && !a.is_deleted; })
-    .map(function (a) { return { case_id: a.case_id, action_type: a.action_type, content: a.content, owner: names[a.owner_id] || '', due_date: a.due_date, approval_status: a.needs_approval ? a.approval_status : '불필요', status: a.status, result: a.result, done_date: a.done_date }; });
+    .map(function (a) { return { case_id: a.case_id, action_type: a.action_type, content: a.content, owner: names[a.owner_id] || '', due_date: a.due_date, approval_status: a.needs_approval ? a.approval_status : '불필요', status: a.status, result: a.result, done_date: a.done_date, dunning_round: a.dunning_round, sent_method: a.sent_method, sent_date: a.sent_date }; });
   var situations = readTable_('DB_MASTER', 'M_SITUATION').filter(function (x) { return !x.is_deleted; }).map(function (x) {
     var p = proceduresFor_(x.situation_code, today);
     return { situation_code: x.situation_code, label: x.label, condition: x.condition_json, status: p.status, message: p.message,

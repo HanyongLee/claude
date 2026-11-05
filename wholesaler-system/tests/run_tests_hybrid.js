@@ -313,6 +313,41 @@ section('가상 데이터(미수 자료 포함) 환경 회귀');
   const st = run(c2, 'readStatus_()');
   ok(r.status === '완료' && st.ar_available === '예' && st.data_status === '정상' && Number(st.snapshot_files) === 4, '정기 처리 + 스냅샷(전체 + 경매사 3) 완료', `스냅샷 ${st.snapshot_files}개`);
   ok(table(c2, 'DB_AGG', 'A_RECON').filter(x => x.calc_run_id === st.last_calc_run_id).every(x => x.result === '일치'), '대사 일치 유지');
+
+  /* ── 독촉 이력 표준화 (보완 4) ── */
+  section('독촉 이력 표준화 (차수·발송 방법·발송일)');
+  const caseId = table(c2, 'DB_WORK', 'T_CASE').filter(x => x.status !== '종결' && !x.is_deleted)[0].case_id;
+  run(c2, `_testUserOverride = 'credit1@example.invalid'`);
+  let dunErr = run(c2, `api_createAction({ case_id: ${J(caseId)}, action_type: '독촉장 발송', content: '(가상) 1차 독촉', due_date: '2026-11-05' })`);
+  ok(!dunErr.ok && /발송 방법/.test(dunErr.error), '독촉 등록 시 발송 방법 없으면 거부', dunErr.error);
+  const d1 = run(c2, `api_createAction({ case_id: ${J(caseId)}, action_type: '독촉장 발송', content: '(가상) 1차 독촉', due_date: '2026-11-05', sent_method: '전화' })`).data;
+  const d2 = run(c2, `api_createAction({ case_id: ${J(caseId)}, action_type: '독촉장 발송', content: '(가상) 2차 독촉', due_date: '2026-11-12', sent_method: '내용증명', sent_date: '2026-10-29' })`).data;
+  ok(Number(d1.dunning_round) === 1 && Number(d2.dunning_round) === 2 && d2.sent_method === '내용증명' && d2.sent_date === '2026-10-29', '차수가 중도매인 기준으로 자동 증가(1차→2차), 발송 방법·발송일 기록', `1차 ${d1.sent_method} / 2차 ${d2.sent_method} ${d2.sent_date}`);
+  const done1 = run(c2, `api_completeAction(${J(d1.action_id)}, '(가상) 전화 독촉 완료, 결제 약속 받음', '2026-10-28')`).data;
+  ok(done1.sent_date === '2026-10-28', '발송일 없이 등록한 독촉은 결과 등록일을 발송일로 기록', done1.sent_date);
+  const cd = run(c2, `api_caseDetail(${J(caseId)})`).data;
+  ok(cd.dunning && cd.dunning.next === 3 && cd.dunning.history.length === 2 && /법적 조치/.test(cd.dunning.note), '관리 건 상세에 독촉 이력·다음 차수(3차)·단계 안내 제공', `다음 ${cd.dunning.next}차, 이력 ${cd.dunning.history.map(x => x.round + '차').join(',')}`);
+  const norm = run(c2, `api_createAction({ case_id: ${J(caseId)}, action_type: '결제계획 확인', content: '(가상) 일반 조치', due_date: '2026-11-05', sent_method: '전화', dunning_round: 9 })`).data;
+  ok(norm.dunning_round === '' && norm.sent_method === '', '독촉이 아닌 조치에는 차수·발송 값이 저장되지 않음');
+  const sum2 = run(c2, `api_summary()`).data;
+  ok(sum2.openActions.some(a => Number(a.dunning_round) === 2 && a.sent_method === '내용증명'), '주간 요약·스냅샷 자료에 독촉 차수·방법 포함');
+  run(c2, `_testUserOverride = null`);
+
+  /* ── 가져오기 실패 알림 (보완 2) ── */
+  section('일일 알림에 가져오기 실패 포함');
+  run(c2, `(function(){ var f = DriveApp.getFolderById(PropertiesService.getScriptProperties().getProperty('FOLDER_INBOX')); f.createFile('TREND_C-9999-0000_20261028.json', '{깨진 JSON', 'application/json'); })()`);
+  pipeline(c2);
+  const failBatch = table(c2, 'DB_RAW', 'R_BATCH').filter(b => b.file_name === 'TREND_C-9999-0000_20261028.json')[0];
+  ok(failBatch && failBatch.status === '형식오류', '깨진 파일이 형식오류 배치로 기록', failBatch && failBatch.status);
+  run(c2, `api_updateSetting('NOTIFY_EMAIL', '예', false, '', '검증')`);
+  c2.__gas.mails.length = 0;
+  run(c2, `sendDailySummary_('검증')`);
+  const mails = c2.__gas.mails;
+  const adminMail = mails.filter(m => m.to === OWNER)[0];
+  const aucMail = mails.filter(m => m.to === 'auctioneer1@example.invalid')[0];
+  ok(adminMail && /가져오기 실패 1건/.test(adminMail.body) && /03_가져오기_오류/.test(adminMail.body) && /TREND_C-9999-0000/.test(adminMail.body), '관리자 메일에 실패 파일명·사유·확인 위치 포함', adminMail && adminMail.subject);
+  ok(!aucMail || !/가져오기 실패/.test(aucMail.body), '경매사 메일에는 가져오기 실패를 넣지 않음(자료 권한자만)');
+  ok(adminMail && !/만원|원 /.test(adminMail.body.replace(/가져오기|확인/g, '')), '알림 메일에 금액 미포함 원칙 유지');
 }
 
 console.log('중도매인 통합관리 하이브리드 배포 검증 (모의 Apps Script, 가상 자료, 기준일 2026-10-28)');
