@@ -5,145 +5,156 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>중도매인 채권관리 주간 현황</title>
 <style>
+  /* 토스 스타일: 연회색 배경 + 테두리 없는 흰 라운드 카드 + 큰 숫자 + 알약 버튼 */
   :root {
     color-scheme: light;
-    --bg: #f6f6f4; --surface: #fcfcfb; --surface-2: #f0f0ec; --border: #dcdbd5;
-    --text: #0b0b0b; --text-2: #52514e; --muted: #7a7974;
-    --accent: #2a78d6; --accent-ink: #ffffff;
-    --series-1: #2a78d6; --series-2: #eb6834;
-    --ok: #0f7b3e; --ok-bg: #e5f4ea; --warn: #8a5a00; --warn-bg: #fff3d6;
-    --bad: #b42318; --bad-bg: #fde8e7; --info-bg: #e8eef7;
+    --bg: #f2f4f6; --surface: #ffffff; --surface-2: #f2f4f6; --border: #eef0f3;
+    --text: #191f28; --text-2: #4e5968; --muted: #8b95a1;
+    --accent: #3182f6; --accent-ink: #ffffff;
+    --series-1: #3182f6; --series-2: #f97e4b;
+    --ok: #1b9e66; --ok-bg: #e6f6ee; --warn: #b26b00; --warn-bg: #fff3d8;
+    --bad: #f04452; --bad-bg: #fdeaec; --info-bg: #eaf2fe;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
       color-scheme: dark;
-      --bg: #121211; --surface: #1a1a19; --surface-2: #232321; --border: #3a3936;
-      --text: #f0efec; --text-2: #c3c2b7; --muted: #94938b;
-      --accent: #3987e5; --accent-ink: #ffffff;
-      --series-1: #3987e5; --series-2: #d95926;
-      --ok: #6fd39a; --ok-bg: #173323; --warn: #f2c25b; --warn-bg: #3a2e12;
-      --bad: #ff8f86; --bad-bg: #3d1a18; --info-bg: #1d2a3b;
+      --bg: #101013; --surface: #1b1b20; --surface-2: #2c2c35; --border: #26262e;
+      --text: #e5e8eb; --text-2: #b0b8c1; --muted: #6b7684;
+      --accent: #4593fc; --accent-ink: #ffffff;
+      --series-1: #4593fc; --series-2: #f97e4b;
+      --ok: #4cc38a; --ok-bg: #16281f; --warn: #e5b05c; --warn-bg: #2e2514;
+      --bad: #ff6b6b; --bad-bg: #331a1c; --info-bg: #182a44;
     }
   }
   :root[data-theme="dark"] {
     color-scheme: dark;
-    --bg: #121211; --surface: #1a1a19; --surface-2: #232321; --border: #3a3936;
-    --text: #f0efec; --text-2: #c3c2b7; --muted: #94938b;
-    --accent: #3987e5; --accent-ink: #ffffff;
-    --series-1: #3987e5; --series-2: #d95926;
-    --ok: #6fd39a; --ok-bg: #173323; --warn: #f2c25b; --warn-bg: #3a2e12;
-    --bad: #ff8f86; --bad-bg: #3d1a18; --info-bg: #1d2a3b;
+    --bg: #101013; --surface: #1b1b20; --surface-2: #2c2c35; --border: #26262e;
+    --text: #e5e8eb; --text-2: #b0b8c1; --muted: #6b7684;
+    --accent: #4593fc; --accent-ink: #ffffff;
+    --series-1: #4593fc; --series-2: #f97e4b;
+    --ok: #4cc38a; --ok-bg: #16281f; --warn: #e5b05c; --warn-bg: #2e2514;
+    --bad: #ff6b6b; --bad-bg: #331a1c; --info-bg: #182a44;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text);
-    font: 14px/1.5 -apple-system, "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; }
+  body { margin: 0; background: var(--bg); color: var(--text); letter-spacing: -0.01em;
+    font: 15px/1.5 -apple-system, "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; }
   a { color: var(--accent); text-decoration: none; }
   a:hover { text-decoration: underline; }
-  /* 레이아웃: 상단 띠(브랜드·기준일·사용자) + 왼쪽 고정 내비 + 본문. 본문은 2/3 주 영역 + 1/3 보조 영역 */
-  .topbar { display: flex; align-items: center; gap: 8px 16px; padding: 8px 16px; min-height: 48px;
-    background: var(--surface); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 6; }
-  .menu-btn { display: none; border: 1px solid var(--border); background: var(--surface); border-radius: 6px; padding: 2px 8px; font-size: 16px; }
-  .shell { display: grid; grid-template-columns: 220px minmax(0, 1fr); min-height: calc(100vh - 49px); }
-  .side { background: var(--surface); border-right: 1px solid var(--border); position: sticky; top: 49px; height: calc(100vh - 49px); overflow-y: auto; padding: 10px 8px; }
-  .side .grp { font-size: 11px; letter-spacing: .04em; color: var(--muted); text-transform: uppercase; margin: 12px 8px 4px; }
-  .side a { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 10px; border-radius: 6px; color: var(--text-2); font-size: 14px; }
-  .side a:hover { background: var(--surface-2); text-decoration: none; }
-  .side a.on { background: var(--info-bg); color: var(--text); font-weight: 600; }
-  .side a .cnt { font-size: 11px; padding: 0 6px; border-radius: 9px; background: var(--surface-2); color: var(--text-2); }
+  /* 상단: 배경과 같은 색, 테두리 없음 */
+  .topbar { display: flex; align-items: center; gap: 8px 16px; padding: 12px 20px; min-height: 52px;
+    background: var(--bg); position: sticky; top: 0; z-index: 6; }
+  .menu-btn { display: none; border: none; background: var(--surface); border-radius: 12px; padding: 4px 10px; font-size: 16px; }
+  .brand { font-weight: 800; font-size: 17px; }
+  .ver { color: var(--muted); font-weight: 400; font-size: 12px; }
+  .who { color: var(--muted); font-size: 13px; }
+  .statusbar { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--muted); flex: 1; justify-content: center; }
+  .statusbar b { color: var(--text-2); font-weight: 600; }
+  /* 왼쪽 내비: 면 없이 떠 있는 라운드 항목 */
+  .shell { display: grid; grid-template-columns: 216px minmax(0, 1fr); min-height: calc(100vh - 52px); }
+  .side { position: sticky; top: 52px; height: calc(100vh - 52px); overflow-y: auto; padding: 8px 10px 16px; }
+  .side .grp { font-size: 11px; letter-spacing: .05em; color: var(--muted); margin: 14px 12px 4px; }
+  .side a { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 12px; border-radius: 12px; color: var(--text-2); font-size: 14.5px; }
+  .side a:hover { background: var(--surface); text-decoration: none; }
+  .side a.on { background: var(--surface); color: var(--text); font-weight: 700; }
+  .side a .cnt { font-size: 11px; padding: 1px 7px; border-radius: 9px; background: var(--surface-2); color: var(--text-2); }
   .side a .cnt.hot { background: var(--bad-bg); color: var(--bad); }
   .side a .cnt.warm { background: var(--warn-bg); color: var(--warn); }
+  nav { display: grid; gap: 2px; }
+  main { padding: 8px 20px 32px; max-width: 1240px; width: 100%; margin: 0 auto; min-width: 0; }
+  h1 { font-size: 21px; font-weight: 800; margin: 8px 4px 14px; }
+  h2 { font-size: 16.5px; font-weight: 700; margin: 0 0 10px; }
+  h3 { font-size: 13.5px; margin: 14px 0 6px; color: var(--muted); font-weight: 600; }
+  /* 카드: 테두리·그림자 없는 흰 라운드 */
+  .card { background: var(--surface); border: none; border-radius: 20px; padding: 18px 20px; min-width: 0; }
+  .card.wide { grid-column: 1 / -1; }
+  @media (min-width: 900px) { .card.span2 { grid-column: span 2; } }
+  .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
   .layout { display: grid; grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); gap: 12px; align-items: start; }
   .layout > .main, .layout > .aside { display: grid; gap: 12px; min-width: 0; }
   .layout .card { grid-column: auto; }
-  .kpis { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); margin: 0 0 12px; }
-  .kpi { background: var(--surface); border: 1px solid var(--border); border-left-width: 4px; border-radius: 8px; padding: 8px 12px; cursor: pointer; }
-  .kpi .k { color: var(--text-2); font-size: 12px; } .kpi .v { font-size: 24px; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; }
-  .kpi .v small { font-size: 12px; font-weight: 400; color: var(--text-2); }
-  .kpi.bad { border-left-color: var(--bad); } .kpi.warn { border-left-color: var(--warn); } .kpi.ok { border-left-color: var(--ok); } .kpi.info { border-left-color: var(--accent); }
-  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 10px; }
-  .chips button { padding: 3px 10px; border-radius: 12px; font-size: 13px; }
-  .chips button.on { background: var(--text); color: var(--surface); border-color: var(--text); }
-  .worklist tr.late td { background: color-mix(in srgb, var(--bad-bg) 55%, var(--surface)); }
-  .rec-head { position: sticky; top: 49px; z-index: 4; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; margin-bottom: 12px;
+  .kpis { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); margin: 0 0 12px; }
+  .kpi { background: var(--surface); border: none; border-radius: 16px; padding: 12px 16px; cursor: pointer; }
+  .kpi .k { color: var(--muted); font-size: 12.5px; } .kpi .v { font-size: 24px; font-weight: 800; line-height: 1.25; font-variant-numeric: tabular-nums; }
+  .kpi .v small { font-size: 12px; font-weight: 400; color: var(--muted); }
+  .kpi.bad .v { color: var(--bad); } .kpi.warn .v { color: var(--warn); } .kpi.ok .v { color: var(--text); } .kpi.info .v { color: var(--accent); }
+  .tiles { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); margin-bottom: 12px; }
+  .tile { background: var(--surface); border: none; border-radius: 16px; padding: 12px 16px; }
+  .tile .k { color: var(--muted); font-size: 12.5px; }
+  .tile .v { font-size: 21px; font-weight: 800; }
+  .tile .v small { font-size: 13px; font-weight: 400; color: var(--muted); }
+  .rec-head { position: sticky; top: 52px; z-index: 4; background: var(--surface); border: none; border-radius: 16px; padding: 12px 16px; margin-bottom: 12px;
     display: flex; flex-wrap: wrap; gap: 6px 22px; align-items: center; }
-  .rec-head .t { font-size: 18px; font-weight: 700; margin-right: 6px; }
-  .rec-head .f { font-size: 13px; color: var(--text-2); } .rec-head .f b { color: var(--text); font-weight: 600; }
+  .rec-head .t { font-size: 18px; font-weight: 800; margin-right: 6px; }
+  .rec-head .f { font-size: 13px; color: var(--muted); } .rec-head .f b { color: var(--text); font-weight: 600; }
   .rec-head .acts { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+  /* 표: 머리글 배경 없이 가는 구분선만 */
+  .scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  th, td { padding: 8px 8px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; white-space: nowrap; }
+  th { color: var(--muted); font-weight: 600; background: transparent; font-size: 12.5px; }
+  tr:last-child td { border-bottom: none; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.wrap { white-space: normal; min-width: 220px; }
+  tr.click { cursor: pointer; }
+  tr.click:hover td { background: var(--surface-2); }
+  .worklist tr.late td { background: color-mix(in srgb, var(--bad-bg) 55%, var(--surface)); }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 8px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .b-ok { background: var(--ok-bg); color: var(--ok); }
+  .b-warn { background: var(--warn-bg); color: var(--warn); }
+  .b-bad { background: var(--bad-bg); color: var(--bad); }
+  .b-info { background: var(--info-bg); color: var(--text); }
+  .note { font-size: 12.5px; color: var(--text-2); background: var(--surface-2); border: none; border-radius: 12px; padding: 9px 14px; margin: 10px 0; }
+  .note.warn { background: var(--warn-bg); color: var(--text); }
+  .note.bad { background: var(--bad-bg); color: var(--text); }
+  .muted { color: var(--muted); }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
+  /* 입력·버튼: 알약 모양, 테두리 없음 */
+  input, select, textarea { font: inherit; color: var(--text); background: var(--surface-2); border: 1px solid transparent;
+    border-radius: 12px; padding: 8px 12px; max-width: 100%; }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); background: var(--surface); }
+  textarea { width: 100%; min-height: 54px; }
+  button { font: inherit; border: none; background: var(--surface-2); color: var(--text-2);
+    border-radius: 12px; padding: 8px 14px; font-weight: 600; cursor: pointer; }
+  button:hover { filter: brightness(.97); }
+  button.primary { background: var(--accent); color: var(--accent-ink); }
+  button.danger { color: var(--bad); background: var(--bad-bg); }
+  button:disabled { opacity: .5; cursor: default; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 10px; }
+  .chips button { padding: 5px 12px; border-radius: 18px; font-size: 13px; }
+  .chips button.on { background: var(--text); color: var(--surface); }
+  form.f { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px 12px; margin: 8px 0; }
+  form.f label { display: flex; flex-direction: column; gap: 3px; font-size: 12.5px; color: var(--muted); }
+  form.f .full { grid-column: 1 / -1; }
+  dl.kv { display: grid; grid-template-columns: max-content 1fr; gap: 5px 14px; margin: 0; }
+  dl.kv dt { color: var(--muted); }
+  dl.kv dd { margin: 0; }
+  /* 탭: 회색 트랙 안에서 선택된 것만 흰 알약 */
+  .tabs { display: inline-flex; gap: 2px; flex-wrap: wrap; margin: 10px 0; background: var(--surface-2); border-radius: 14px; padding: 4px; }
+  .tabs button { background: transparent; border-radius: 10px; padding: 7px 14px; color: var(--muted); }
+  .tabs button.on { background: var(--surface); color: var(--text); font-weight: 700; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  .chart { width: 100%; height: auto; display: block; }
+  .chart .axis { fill: var(--muted); font-size: 11px; }
+  .chart .grid line { stroke: var(--border); }
+  .chart .s1 { fill: var(--series-1); }
+  .chart .s2 { fill: var(--series-2); }
+  .chart rect.bar:hover { opacity: .8; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 14px; font-size: 12px; color: var(--muted); }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
+  .toast { position: fixed; right: 16px; bottom: 16px; max-width: 420px; padding: 12px 16px; border-radius: 16px;
+    background: var(--text); color: var(--surface); opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 10; }
+  .toast.show { opacity: .95; }
+  .toast.err { background: var(--bad); color: #fff; }
   @media (max-width: 900px) {
     .menu-btn { display: inline-block; }
     .shell { grid-template-columns: 1fr; }
-    .side { position: fixed; left: 0; top: 49px; width: 240px; transform: translateX(-100%); transition: transform .15s; z-index: 7; box-shadow: 2px 0 8px rgba(0,0,0,.15); }
+    .side { position: fixed; left: 0; top: 52px; width: 240px; transform: translateX(-100%); transition: transform .15s; z-index: 7;
+      background: var(--surface); border-radius: 0 20px 20px 0; box-shadow: 2px 0 12px rgba(0,0,0,.12); }
     .side.open { transform: none; }
     .layout { grid-template-columns: 1fr; }
     .rec-head { position: static; }
     .topbar .statusbar { display: none; }
   }
-  .brand { font-weight: 700; }
-  .ver { color: var(--muted); font-weight: 400; font-size: 12px; }
-  nav { display: grid; gap: 2px; }
-  .who { color: var(--text-2); font-size: 13px; }
-  .statusbar { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--text-2); flex: 1; justify-content: center; }
-  .statusbar b { color: var(--text); font-weight: 600; }
-  main { padding: 16px 20px; max-width: 1296px; width: 100%; margin: 0 auto; min-width: 0; }
-  h1 { font-size: 20px; margin: 4px 0 12px; }
-  h2 { font-size: 16px; margin: 0 0 8px; }
-  h3 { font-size: 14px; margin: 12px 0 6px; color: var(--text-2); }
-  .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; min-width: 0; }
-  .card.wide { grid-column: 1 / -1; }
-  @media (min-width: 900px) { .card.span2 { grid-column: span 2; } }
-  .tiles { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); margin-bottom: 12px; }
-  .tile { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
-  .tile .k { color: var(--text-2); font-size: 12px; }
-  .tile .v { font-size: 22px; font-weight: 700; }
-  .tile .v small { font-size: 13px; font-weight: 400; color: var(--text-2); }
-  .scroll { overflow-x: auto; }
-  table { border-collapse: collapse; width: 100%; font-size: 13px; }
-  th, td { padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; white-space: nowrap; }
-  th { color: var(--text-2); font-weight: 600; background: var(--surface-2); }
-  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-  td.wrap { white-space: normal; min-width: 220px; }
-  tr.click { cursor: pointer; }
-  tr.click:hover td { background: var(--surface-2); }
-  .badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; font-weight: 600; white-space: nowrap; }
-  .b-ok { background: var(--ok-bg); color: var(--ok); }
-  .b-warn { background: var(--warn-bg); color: var(--warn); }
-  .b-bad { background: var(--bad-bg); color: var(--bad); }
-  .b-info { background: var(--info-bg); color: var(--text); }
-  .note { font-size: 12px; color: var(--text-2); background: var(--surface-2); border-left: 3px solid var(--border); padding: 6px 10px; margin: 8px 0; }
-  .note.warn { border-left-color: var(--warn); background: var(--warn-bg); color: var(--text); }
-  .note.bad { border-left-color: var(--bad); background: var(--bad-bg); color: var(--text); }
-  .muted { color: var(--muted); }
-  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
-  input, select, textarea { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border);
-    border-radius: 6px; padding: 5px 8px; max-width: 100%; }
-  textarea { width: 100%; min-height: 54px; }
-  button { font: inherit; border: 1px solid var(--border); background: var(--surface); color: var(--text);
-    border-radius: 6px; padding: 5px 12px; cursor: pointer; }
-  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-  button.danger { color: var(--bad); }
-  button:disabled { opacity: .5; cursor: default; }
-  form.f { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px 12px; margin: 8px 0; }
-  form.f label { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--text-2); }
-  form.f .full { grid-column: 1 / -1; }
-  dl.kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 0; }
-  dl.kv dt { color: var(--text-2); }
-  dl.kv dd { margin: 0; }
-  .tabs { display: flex; gap: 4px; flex-wrap: wrap; margin: 8px 0; }
-  .tabs button.on { background: var(--info-bg); font-weight: 600; }
-  .chart { width: 100%; height: auto; display: block; }
-  .chart .axis { fill: var(--text-2); font-size: 11px; }
-  .chart .grid line { stroke: var(--border); }
-  .chart .s1 { fill: var(--series-1); }
-  .chart .s2 { fill: var(--series-2); }
-  .chart rect.bar:hover { opacity: .8; }
-  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--text-2); }
-  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
-  .toast { position: fixed; right: 16px; bottom: 16px; max-width: 420px; padding: 10px 14px; border-radius: 8px;
-    background: var(--text); color: var(--surface); opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 10; }
-  .toast.show { opacity: .95; }
-  .toast.err { background: var(--bad); color: #fff; }
-  @media (max-width: 640px) { main { padding: 12px 16px; } .tile .v { font-size: 18px; } }
+  @media (max-width: 640px) { main { padding: 4px 12px 24px; } .card { padding: 16px; border-radius: 18px; } .tile .v { font-size: 18px; } }
 </style>
 
 <script>
@@ -250,13 +261,18 @@
     var html = '';
     if (st.data_status && st.data_status !== '정상') html += '<div class="note bad">데이터 상태 <b>' + h(st.data_status) + '</b> — ' + h(st.status_reasons || '') + ' 이 기간 수치는 판정 보류입니다.</div>';
     if (st.ar_available === '아니오') html += '<div class="note warn">미수잔액·입금 자료가 아직 없어 회전율·연체·미수금 증가 징후는 산출되지 않습니다. 실적 감소·담보 기한 징후만 표시됩니다.</div>';
-    // 체계 띠: 채권관리 → 동향관리 → 연체채권 조치
-    html += '<div class="flowband"><span class="step">① 채권관리<small>이상 징후 자동 탐지</small></span><span class="arr">→</span><span class="step">② 동향관리<small>현장 확인 체크리스트</small></span><span class="arr">→</span><span class="step">③ 연체채권 조치<small>매뉴얼 조항에 따른 대응</small></span><span class="goal">목적: 중도매인 실적 관리로 분산 역량 강화</span></div>';
-    // 요약 3장
-    html += '<div class="sum3">' +
-      '<a class="sumcard ' + (flaggedHigh ? 'bad' : (k.flagged ? 'warn' : 'ok')) + '" href="#tab-signal" data-tab="signal"><div class="k">① 채권관리 — 이상 징후</div><div class="v">' + k.flagged + '<small>명</small></div><div class="s">경고 이상 ' + flaggedHigh + '명 · 확인 대기 ' + k.trendWait + '건' + (k.trendLate ? ' · <b>지연 ' + k.trendLate + '</b>' : '') + '</div></a>' +
-      '<a class="sumcard ' + (k.trendLate ? 'bad' : (k.trendWait ? 'warn' : 'ok')) + '" href="#tab-trend" data-tab="trend"><div class="k">② 동향관리 — 현장 확인</div><div class="v">' + k.trendsThisWeek + '<small>건/주</small></div><div class="s">체크리스트 대기 ' + k.trendWait + '건 · 최근 제출 ' + d.recentTrends.length + '건</div></a>' +
-      '<a class="sumcard ' + (k.pendingApproval ? 'warn' : (k.openActions ? 'info' : 'ok')) + '" href="#tab-action" data-tab="action"><div class="k">③ 연체채권 조치</div><div class="v">' + k.openActions + '<small>건 진행</small></div><div class="s">승인 대기 ' + k.pendingApproval + ' · 재점검 ' + k.recheck + (k.recheckDue ? ' (도래 ' + k.recheckDue + ')' : '') + '</div></a></div>';
+    // 요약 목록 카드 (행 = 아이콘·큰 숫자·보기 버튼)
+    var trow = function (tab, no, color, value, unit, label, sub, hot) {
+      return '<a class="trow" href="#tab-' + tab + '" data-tab="' + tab + '">' +
+        '<span class="ticon" style="background:' + color + '1f;color:' + color + '">' + no + '</span>' +
+        '<span class="tmid"><span class="tv"' + (hot ? ' style="color:var(--bad)"' : '') + '>' + value + '<small>' + unit + '</small></span><span class="tk">' + label + (sub ? ' <span class="tdot">·</span> ' + sub : '') + '</span></span>' +
+        '<span class="tbtn">보기</span></a>';
+    };
+    html += '<div class="card tlist">' +
+      trow('signal', '①', '#f04452', k.flagged, '명', '채권관리 — 이상 징후', '경고 이상 ' + flaggedHigh + ' · 확인 대기 ' + k.trendWait + (k.trendLate ? ' · <b>지연 ' + k.trendLate + '</b>' : ''), flaggedHigh > 0) +
+      trow('trend', '②', '#3182f6', k.trendsThisWeek, '건/주', '동향관리 — 현장 확인', '체크리스트 대기 ' + k.trendWait + ' · 최근 제출 ' + d.recentTrends.length, false) +
+      trow('action', '③', '#1b9e66', k.openActions, '건 진행', '연체채권 조치', '승인 대기 ' + k.pendingApproval + ' · 재점검 ' + k.recheck + (k.recheckDue ? ' (도래 ' + k.recheckDue + ')' : ''), false) +
+      '<div class="tfoot">채권관리 → 동향관리 → 연체채권 조치 · 목적: 중도매인 실적 관리로 분산 역량 강화</div></div>';
     // 4분면
     html += '<div class="card"><h2>거래·회수 4분면 <span class="muted" style="font-size:12px;font-weight:400">세로 미수금 회전율 · 가로 ' + h(d.matrix.axes.x) + '</span></h2>' + matrixSvg(d.matrix, link) + '<div class="note">' + h(d.matrix.disclaimer) + '</div></div>';
     // 탭
@@ -301,7 +317,7 @@
     var tabs = root.querySelector('#sumTabs');
     var show = function (t) { Array.prototype.forEach.call(tabs.children, function (b) { b.className = b.getAttribute('data-tab') === t ? 'on' : ''; }); Array.prototype.forEach.call(root.querySelectorAll('.tabpane'), function (p) { p.classList.toggle('hidden', p.id !== 'tab-' + t); }); };
     tabs.onclick = function (e) { var t = e.target.getAttribute('data-tab'); if (t) show(t); };
-    Array.prototype.forEach.call(root.querySelectorAll('.sumcard'), function (a) { a.onclick = function (e) { e.preventDefault(); show(a.getAttribute('data-tab')); tabs.scrollIntoView({ block: 'start' }); }; });
+    Array.prototype.forEach.call(root.querySelectorAll('.trow'), function (a) { a.onclick = function (e) { e.preventDefault(); show(a.getAttribute('data-tab')); tabs.scrollIntoView({ block: 'start' }); }; });
     root.addEventListener('click', function (e) { var b = e.target.closest('button[data-ck]'); if (b && opts.onChecklist) opts.onChecklist(b.getAttribute('data-ck')); });
   }
 
@@ -323,16 +339,16 @@
 })(window);
 </script>
 <style>
-  .flowband { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 12px; font-size: 13.5px; }
-  .flowband .step { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; font-weight: 600; }
-  .flowband .step small { display: block; font-weight: 400; color: var(--text-2); font-size: 11.5px; }
-  .flowband .arr { color: var(--text-2); font-weight: 700; } .flowband .goal { margin-left: auto; color: var(--text-2); font-size: 12.5px; }
-  .sum3 { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); margin-bottom: 12px; }
-  .sumcard { display: block; background: var(--surface); border: 1px solid var(--border); border-left: 5px solid var(--border); border-radius: 8px; padding: 10px 14px; color: var(--text); text-decoration: none; }
-  .sumcard:hover { text-decoration: none; background: var(--surface-2); }
-  .sumcard .k { font-size: 13px; color: var(--text-2); } .sumcard .v { font-size: 28px; font-weight: 700; line-height: 1.2; } .sumcard .v small { font-size: 13px; font-weight: 400; color: var(--text-2); margin-left: 4px; }
-  .sumcard .s { font-size: 12.5px; color: var(--text-2); }
-  .sumcard.bad { border-left-color: var(--bad); } .sumcard.warn { border-left-color: var(--warn); } .sumcard.ok { border-left-color: var(--ok); } .sumcard.info { border-left-color: var(--accent); }
+  .tlist { padding: 8px 10px; margin-bottom: 12px; }
+  .trow { display: flex; align-items: center; gap: 14px; padding: 13px 12px; border-radius: 16px; color: var(--text); text-decoration: none; }
+  .trow:hover { background: var(--surface-2); text-decoration: none; }
+  .ticon { width: 44px; height: 44px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 700; flex: none; }
+  .tmid { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  .tv { font-size: 20px; font-weight: 800; line-height: 1.25; font-variant-numeric: tabular-nums; }
+  .tv small { font-size: 13px; font-weight: 600; color: var(--text-2); margin-left: 3px; }
+  .tk { font-size: 13px; color: var(--muted); } .tk b { color: var(--bad); } .tdot { opacity: .5; }
+  .tbtn { background: var(--surface-2); border-radius: 12px; padding: 8px 14px; font-size: 14px; font-weight: 600; color: var(--text-2); flex: none; }
+  .tfoot { padding: 11px 12px 5px; font-size: 12.5px; color: var(--muted); border-top: 1px solid var(--border); margin-top: 4px; }
   .tabpane.hidden { display: none; }
   .tabs button.on { background: var(--info-bg); font-weight: 600; }
   .ck-sheet { background: #fff; color: #111; border: 1px solid #999; padding: 16px; margin: 12px 0; page-break-after: always; }
@@ -354,7 +370,7 @@
 <header class="topbar"><div class="brand">중도매인 채권관리 주간 현황 <span class="ver" id="snapFor"></span></div><div class="statusbar" id="statusbar"></div><div class="who">스냅샷 · 사내 공유용</div></header>
 <main id="view"><p class="muted">자료를 읽는 중…</p></main>
 <script>
-var DATA = {"generated_at":"2026-10-28 09:00:00","for_user":{"name":"시스템","role":"관리자","user_id":"owner@example.invalid"},"app":{"name":"중도매인 통합관리","version":"0.7.0-weekly"},"status":{"base_date":"2026-10-27","data_status":"정상","status_reasons":"","last_updated":"2026-10-28 09:00:00","ar_available":"아니오","signal_base_date":"2026-10-27"},"meta":{"baseDate":"2026-10-27","metricBaseDate":"2026-10-27","lastUpdated":"2026-10-28 09:00:00","dataStatus":"정상","period12":"2025-11 ~ 2026-10","monthComplete":false,"lastCompleteYm":"2026-09","currentYm":"2026-10","ytdPeriod":"2026-01 ~ 2026-09","turnoverNote":"회전율·회수일수·한도 사용률은 부류 구분 없이 전체 기준입니다. 부류별 채권 배분 근거가 없어 부류별 회전율을 산출하지 않습니다.","partialNote":"2026-10은 진행 중인 월입니다. 전년 비교는 동일 경과 경매일 기준으로만 표시하며, 월 전체 증감률은 월 마감 후 표시합니다.","monthsAvailable":25},"notes":{"turnover":"회전율·회수일수·한도 사용률은 부류 구분 없이 전체 기준입니다. 부류별 채권 배분 근거가 없어 부류별 회전율을 산출하지 않습니다.","partial":"2026-10은 진행 중인 월입니다. 전년 비교는 동일 경과 경매일 기준으로만 표시하며, 월 전체 증감률은 월 마감 후 표시합니다.","privacy":"이 파일에는 보증인 성명·연락처·증빙·변경 이력이 들어 있지 않습니다. 파일을 받은 사람은 파일 안 자료를 모두 볼 수 있으므로 외부로 전달하지 마세요."},"resultClasses":["일시적 변화","지속 관찰","채권 검토 필요","판정 보류(자료 부족)"],"rules":{"S01":{"label":"미수금 회전율 저하","family":"회수","severity":"주의"},"S02":{"label":"미수금 증가","family":"회수","severity":"주의"},"S03":{"label":"연체 발생·장기화","family":"회수","severity":"경고"},"S04":{"label":"구매실적 급감","family":"거래","severity":"주의"},"S05":{"label":"한도 사용률 상승","family":"회수","severity":"주의"},"S06":{"label":"담보·보증 기한 도래","family":"기한","severity":"정보"},"S07":{"label":"복수 징후 동시 발생","family":"복합","severity":"경고"}},"quadrants":{"HH":{"code":"HH","label":"핵심 유지군","desc":"실적 증가·회전율 높음"},"HL":{"code":"HL","label":"집중 점검군","desc":"실적 증가·회전율 낮음 (거래는 늘고 회수는 느림)"},"LH":{"code":"LH","label":"육성 검토군","desc":"실적 감소·회전율 높음"},"LL":{"code":"LL","label":"개별 진단군","desc":"실적 감소·회전율 낮음"}},"kpis":{"flagged":1,"flaggedHigh":0,"trendWait":1,"trendLate":0,"trendsThisWeek":1,"openActions":0,"pendingApproval":0,"recheck":0,"recheckDue":0,"wholesalers":4},"flagged":[{"wholesaler_id":"6","name":"(가상)정","assignee":"(가상)경매사A","severity":"정보","signals":[{"signal_id":"SG261028090000-F7223E","wholesaler_id":"6","rule_id":"S06","label":"담보·보증 기한 도래","severity":"정보","status":"연결","first_date":"2026-10-27","last_date":"2026-10-27","case_id":"","evidence":{"kind":"담보","id":"C6-2007","label":"보증보험증권","date":"2026-11-20","dday":24}}],"case_id":"C-2026-0002","case_status":"동향확인중","trend_due":"2026-10-31","latest_trend":null,"balance":null,"overdue":null,"overdueDays":null,"turnover":null,"yoy":{"status":"정상","value":0},"lastMonth":{"ym":"2026-09","amount":46800000,"days":26,"prevAmount":46800000,"yoy":{"status":"정상","value":0}},"guides":[]}],"trendWait":[{"case_id":"C-2026-0002","wholesaler_id":"6","name":"(가상)정","auctioneer":"(가상)경매사A","trend_due":"2026-10-31","overdue":false,"signals":["S06"]}],"recentTrends":[{"name":"(가상)갑","wholesaler_id":"1","case_id":"C-2026-0001","version":1,"checked_date":"2026-10-28","check_method":"방문","result_class":"채권 검토 필요","facts":["(가상) 10월 결제 지연 사유: 거래처 대금 미회수","(가상) 11/15 결제 약속"],"writer":"(가상)경매사A","submitted_at":"2026-10-28 09:00:00","official_source":"파일 제출(TREND_C-2026-0001_20261028.json)"}],"openActions":[],"doneActions":[],"recheck":[],"matrix":{"xMode":"전년동월증감","growthRank":{"ym":"2026-09","points":[{"wholesaler_id":"1","name":"(가상)갑","x":0,"lastMonth":65000000,"prevYearMonth":65000000,"size":65000000},{"wholesaler_id":"2","name":"(가상)병","x":0,"lastMonth":23400000,"prevYearMonth":23400000,"size":23400000},{"wholesaler_id":"6","name":"(가상)정","x":0,"lastMonth":46800000,"prevYearMonth":46800000,"size":46800000},{"wholesaler_id":"9","name":"(가상)자동등록","x":0,"lastMonth":15600000,"prevYearMonth":15600000,"size":15600000}],"total":4,"decline":0,"idle":[],"note":"미수잔액·입금 자료가 없어 세로축(회전율)을 셀 수 없습니다. 자료가 들어오면 4분면으로 바뀝니다."},"boundaries":{"x":0,"xSource":"전년 동월과 같음(0%)","y":null,"ySource":"당기중앙값 (고정값 미설정으로 대체)","computedAt":"2026-10-28 09:00:00"},"counts":{"HH":0,"HL":0,"LH":0,"LL":0},"points":[],"excluded":[{"wholesaler_id":"1","name":"(가상)갑","x":0,"y":null,"size":65000000,"amount12":808250000,"lastMonth":65000000,"prevYearMonth":65000000,"growth":{"status":"정상","value":0},"balance":null,"collectionDays":null,"overdue":null,"reason":"회전율 기간 잔액 자료 없음"},{"wholesaler_id":"2","name":"(가상)병","x":0,"y":null,"size":23400000,"amount12":290970000,"lastMonth":23400000,"prevYearMonth":23400000,"growth":{"status":"정상","value":0},"balance":null,"collectionDays":null,"overdue":null,"reason":"회전율 기간 잔액 자료 없음"},{"wholesaler_id":"6","name":"(가상)정","x":0,"y":null,"size":46800000,"amount12":581940000,"lastMonth":46800000,"prevYearMonth":46800000,"growth":{"status":"정상","value":0},"balance":null,"collectionDays":null,"overdue":null,"reason":"회전율 기간 잔액 자료 없음"},{"wholesaler_id":"9","name":"(가상)자동등록","x":0,"y":null,"size":15600000,"amount12":193980000,"lastMonth":15600000,"prevYearMonth":15600000,"growth":{"status":"정상","value":0},"balance":null,"collectionDays":null,"overdue":null,"reason":"회전율 기간 잔액 자료 없음"}],"disclaimer":"이 분류는 관리 우선순위를 찾기 위한 참고 자료이며, 신용등급이나 거래제한 기준이 아닙니다. 신호·조치 판단에 자동으로 연결되지 않습니다.","axes":{"x":"2026-09 사업실적의 전년 동월 대비 증감률(전체)","y":"최근 3개월 미수금 회전율(전체 기준)","color":"4분면 분류","size":"2026-09 사업실적(구매금액)"},"quadrants":{"HH":{"code":"HH","label":"핵심 유지군","desc":"실적 증가·회전율 높음"},"HL":{"code":"HL","label":"집중 점검군","desc":"실적 증가·회전율 낮음 (거래는 늘고 회수는 느림)"},"LH":{"code":"LH","label":"육성 검토군","desc":"실적 감소·회전율 높음"},"LL":{"code":"LL","label":"개별 진단군","desc":"실적 감소·회전율 낮음"}}},"guides":[],"checklists":[{"case_id":"C-2026-0002","wholesaler_id":"6","name":"(가상)정","auctioneer":"(가상)경매사A","opened_date":"2026-10-28","trend_due":"2026-10-31","signals":["S06 담보·보증 기한 도래"],"items":[{"item_id":"CK01","category":"인력","text":"종업원·배송 인력이 줄었거나 경리·판매 담당 등 핵심 직원이 그만뒀다 (매출·수익 감소의 강한 신호)","weight":2,"is_assumed":true},{"item_id":"CK02","category":"결제","text":"결제일 연기·분할·부분 결제를 요청했거나, 결제 약속을 어긴 적이 있다","weight":2,"is_assumed":true},{"item_id":"CK03","category":"결제","text":"결제 수단이 바뀌었다 (현금→어음·카드·소액 분할, 제3자 명의 입금 등)","weight":1,"is_assumed":true},{"item_id":"CK04","category":"거래","text":"경매 참여 횟수가 줄었거나 낙찰 물량·단가가 평소 패턴과 다르게 급감·저가 위주로 바뀌었다","weight":1,"is_assumed":true},{"item_id":"CK05","category":"거래","text":"주요 납품처(마트·식당·소매) 이탈·축소가 있거나 \"거래처에서 돈을 못 받고 있다\"고 호소한다","weight":1,"is_assumed":true},{"item_id":"CK06","category":"현장","text":"점포·창고 재고가 비정상적으로 줄었거나, 차량·설비를 줄이거나 팔았거나, 운영 시간이 짧아졌다","weight":1,"is_assumed":true},{"item_id":"CK07","category":"대표자","text":"대표자가 연락을 피하거나 현장 부재가 잦고, 건강·가정·소송·경영권 분쟁 등 사정이 확인됐다","weight":2,"is_assumed":true},{"item_id":"CK08","category":"신용","text":"타 금융기관 연체, 세금 체납, 압류·가압류 통지, 담보 부동산 처분·추가 설정 소식이 있다","weight":2,"is_assumed":true},{"item_id":"CK09","category":"자금","text":"선지급·외상한도 증액·결제 유예를 급히 요청하거나, 사채·고금리 자금을 쓰는 정황이 있다","weight":2,"is_assumed":true},{"item_id":"CK10","category":"관계","text":"다른 공판장·도매시장으로 거래를 옮기거나, 다른 중도매인 명의로 거래하는 정황이 있다","weight":1,"is_assumed":true}]}],"checklistItems":[{"item_id":"CK01","category":"인력","text":"종업원·배송 인력이 줄었거나 경리·판매 담당 등 핵심 직원이 그만뒀다 (매출·수익 감소의 강한 신호)","weight":2,"is_assumed":true},{"item_id":"CK02","category":"결제","text":"결제일 연기·분할·부분 결제를 요청했거나, 결제 약속을 어긴 적이 있다","weight":2,"is_assumed":true},{"item_id":"CK03","category":"결제","text":"결제 수단이 바뀌었다 (현금→어음·카드·소액 분할, 제3자 명의 입금 등)","weight":1,"is_assumed":true},{"item_id":"CK04","category":"거래","text":"경매 참여 횟수가 줄었거나 낙찰 물량·단가가 평소 패턴과 다르게 급감·저가 위주로 바뀌었다","weight":1,"is_assumed":true},{"item_id":"CK05","category":"거래","text":"주요 납품처(마트·식당·소매) 이탈·축소가 있거나 \"거래처에서 돈을 못 받고 있다\"고 호소한다","weight":1,"is_assumed":true},{"item_id":"CK06","category":"현장","text":"점포·창고 재고가 비정상적으로 줄었거나, 차량·설비를 줄이거나 팔았거나, 운영 시간이 짧아졌다","weight":1,"is_assumed":true},{"item_id":"CK07","category":"대표자","text":"대표자가 연락을 피하거나 현장 부재가 잦고, 건강·가정·소송·경영권 분쟁 등 사정이 확인됐다","weight":2,"is_assumed":true},{"item_id":"CK08","category":"신용","text":"타 금융기관 연체, 세금 체납, 압류·가압류 통지, 담보 부동산 처분·추가 설정 소식이 있다","weight":2,"is_assumed":true},{"item_id":"CK09","category":"자금","text":"선지급·외상한도 증액·결제 유예를 급히 요청하거나, 사채·고금리 자금을 쓰는 정황이 있다","weight":2,"is_assumed":true},{"item_id":"CK10","category":"관계","text":"다른 공판장·도매시장으로 거래를 옮기거나, 다른 중도매인 명의로 거래하는 정황이 있다","weight":1,"is_assumed":true}],"wholesalers":[{"wholesaler_id":"1","name":"(가상)갑","biz_status":"정상","isNew":false,"categories":"과일","dataState":"정상","assignee":"(가상)경매사A","byCategory":{"과일":{"amount12":73500000,"days12":49,"months12":2,"lastMonth":{"ym":"2026-09","amount":39000000,"days":26,"prevAmount":null,"yoy":{"status":"비교불가","reason":"전년 자료 없음"}},"ytd":{"from":"2026-01","to":"2026-09","amount":39000000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 자료 없음"}},"mtd":{"ym":"2026-10","amount":34500000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 실적 0"},"basis":"동일 경과 경매일","elapsed":23},"shareInWs":0.09093721002165171,"shareOfMarket":0.43103448275862066},"채소":{"amount12":36750000,"days12":49,"months12":2,"lastMonth":{"ym":"2026-09","amount":19500000,"days":26,"prevAmount":null,"yoy":{"status":"비교불가","reason":"전년 자료 없음"}},"ytd":{"from":"2026-01","to":"2026-09","amount":19500000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 자료 없음"}},"mtd":{"ym":"2026-10","amount":17250000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 실적 0"},"basis":"동일 경과 경매일","elapsed":23},"shareInWs":0.045468605010825856,"shareOfMarket":0.43103448275862066},"기타":{"amount12":12250000,"days12":49,"months12":2,"lastMonth":{"ym":"2026-09","amount":6500000,"days":26,"prevAmount":null,"yoy":{"status":"비교불가","reason":"전년 자료 없음"}},"ytd":{"from":"2026-01","to":"2026-09","amount":6500000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 자료 없음"}},"mtd":{"ym":"2026-10","amount":5750000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 실적 0"},"basis":"동일 경과 경매일","elapsed":23},"shareInWs":0.015156201670275286,"shareOfMarket":0.43103448275862066},"전체":{"amount12":808250000,"days12":49,"months12":12,"lastMonth":{"ym":"2026-09","amount":65000000,"days":26,"prevAmount":65000000,"yoy":{"status":"정상","value":0}},"ytd":{"from":"2026-01","to":"2026-09","amount":614250000,"prevAmount":614250000,"growth":{"status":"정상","value":0}},"mtd":{"ym":"2026-10","amount":57500000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 실적 0"},"basis":"동일 경과 경매일","elapsed":23},"shareOfMarket":0.43103448275862066}},"turnover":null,"turnoverInfo":{"status":"산출불가","reason":"기간 잔액 자료 없음","method":"","period":"2026-07-29~2026-10-27"},"collectionDays":null,"balance":null,"overdue":null,"overdueDays":null,"limitUsage":null,"limitUsageInfo":{"status":"산출불가","reason":"적용 한도 결합 방식 미확인(설정 LIMIT_COMBINE)","method":"","period":"~"},"limits":[{"limit_type":"추가한도","amount":124000000,"valid_from":"2026-09-16","valid_to":"9999-12-31"},{"limit_type":"기본한도","amount":70000000,"valid_from":"2026-10-20","valid_to":"9999-12-31"},{"limit_type":"마감한도","amount":24000000,"valid_from":"2026-09-16","valid_to":"9999-12-31"}],"collaterals":[{"type":"부동산","set_amount":60000000,"recognized_amount":"","expiry_date":"","review_status":"파일 적재(내부 인정금액 미확인)"},{"type":"예금(질권)","set_amount":50000000,"recognized_amount":"","expiry_date":"2027-07-29","review_status":"파일 적재(내부 인정금액 미확인)"}],"guarantee":{"has":"있음","scope":"담보현황 기재(범위·한도 미확인)","period_to":""}},{"wholesaler_id":"2","name":"(가상)병","biz_status":"정상","isNew":false,"categories":"채소","dataState":"정상","assignee":"(가상)경매사B","byCategory":{"과일":{"amount12":26460000,"days12":49,"months12":2,"lastMonth":{"ym":"2026-09","amount":14040000,"days":26,"prevAmount":null,"yoy":{"status":"비교불가","reason":"전년 자료 없음"}},"ytd":{"from":"2026-01","to":"2026-09","amount":14040000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 자료 없음"}},"mtd":{"ym":"2026-10","amount":12420000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 실적 0"},"basis":"동일 경과 경매일","elapsed":23},"shareInWs":0.09093721002165171,"shareOfMarket":0.15517241379310345},"채소":{"amount12":13230000,"days12":49,"months12":2,"lastMonth":{"ym":"2026-09","amount":7020000,"days":26,"prevAmount":null,"yoy":{"status":"비교불가","reason":"전년 자료 없음"}},"ytd":{"from":"2026-01","to":"2026-09","amount":7020000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 자료 없음"}},"mtd":{"ym":"2026-10","amount":6210000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 실적 0"},"basis":"동일 경과 경매일","elapsed":23},"shareInWs":0.045468605010825856,"shareOfMarket":0.15517241379310345},"기타":{"amount12":4410000,"days12":49,"months12":2,"lastMonth":{"ym":"2026-09","amount":2340000,"days":26,"prevAmount":null,"yoy":{"status":"비교불가","reason":"전년 자료 없음"}},"ytd":{"from":"2026-01","to":"2026-09","amount":2340000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 자료 없음"}},"mtd":{"ym":"2026-10","amount":2070000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 실적 0"},"basis":"동일 경과 경매일","elapsed":23},"shareInWs":0.015156201670275286,"shareOfMarket":0.15517241379310345},"전체":{"amount12":290970000,"days12":49,"months12":12,"lastMonth":{"ym":"2026-09","amount":23400000,"days":26,"prevAmount":23400000,"yoy":{"status":"정상","value":0}},"ytd":{"from":"2026-01","to":"2026-09","amount":221130000,"prevAmount":221130000,"growth":{"status":"정상","value":0}},"mtd":{"ym":"2026-10","amount":20700000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 실적 0"},"basis":"동일 경과 경매일","elapsed":23},"shareOfMarket":0.15517241379310345}},"turnover":null,"turnoverInfo":{"status":"산출불가","reason":"기간 잔액 자료 없음","method":"","period":"2026-07-29~2026-10-27"},"collectionDays":null,"balance":null,"overdue":null,"overdueDays":null,"limitUsage":null,"limitUsageInfo":{"status":"산출불가","reason":"적용 한도 결합 방식 미확인(설정 LIMIT_COMBINE)","method":"","period":"~"},"limits":[{"limit_type":"추가한도","amount":27000000,"valid_from":"2026-09-16","valid_to":"9999-12-31"},{"limit_type":"기본한도","amount":27000000,"valid_from":"2026-09-16","valid_to":"9999-12-31"},{"limit_type":"마감한도","amount":8000000,"valid_from":"2026-09-16","valid_to":"9999-12-31"}],"collaterals":[{"type":"거래보증금","set_amount":30000000,"recognized_amount":"","expiry_date":"","review_status":"파일 적재(내부 인정금액 미확인)"}],"guarantee":{"has":"없음","scope":"","period_to":""}},{"wholesaler_id":"6","name":"(가상)정","biz_status":"정상","isNew":false,"categories":"과일","dataState":"정상","assignee":"(가상)경매사A","byCategory":{"과일":{"amount12":52920000,"days12":49,"months12":2,"lastMonth":{"ym":"2026-09","amount":28080000,"days":26,"prevAmount":null,"yoy":{"status":"비교불가","reason":"전년 자료 없음"}},"ytd":{"from":"2026-01","to":"2026-09","amount":28080000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 자료 없음"}},"mtd":{"ym":"2026-10","amount":24840000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 실적 0"},"basis":"동일 경과 경매일","elapsed":23},"shareInWs":0.09093721002165171,"shareOfMarket":0.3103448275862069},"채소":{"amount12":26460000,"days12":49,"months12":2,"lastMonth":{"ym":"2026-09","amount":14040000,"days":26,"prevAmount":null,"yoy":{"status":"비교불가","reason":"전년 자료 없음"}},"ytd":{"from":"2026-01","to":"2026-09","amount":14040000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 자료 없음"}},"mtd":{"ym":"2026-10","amount":12420000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 실적 0"},"basis":"동일 경과 경매일","elapsed":23},"shareInWs":0.045468605010825856,"shareOfMarket":0.3103448275862069},"기타":{"amount12":8820000,"days12":49,"months12":2,"lastMonth":{"ym":"2026-09","amount":4680000,"days":26,"prevAmount":null,"yoy":{"status":"비교불가","reason":"전년 자료 없음"}},"ytd":{"from":"2026-01","to":"2026-09","amount":4680000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 자료 없음"}},"mtd":{"ym":"2026-10","amount":4140000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 실적 0"},"basis":"동일 경과 경매일","elapsed":23},"shareInWs":0.015156201670275286,"shareOfMarket":0.3103448275862069},"전체":{"amount12":581940000,"days12":49,"months12":12,"lastMonth":{"ym":"2026-09","amount":46800000,"days":26,"prevAmount":46800000,"yoy":{"status":"정상","value":0}},"ytd":{"from":"2026-01","to":"2026-09","amount":442260000,"prevAmount":442260000,"growth":{"status":"정상","value":0}},"mtd":{"ym":"2026-10","amount":41400000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 실적 0"},"basis":"동일 경과 경매일","elapsed":23},"shareOfMarket":0.3103448275862069}},"turnover":null,"turnoverInfo":{"status":"산출불가","reason":"기간 잔액 자료 없음","method":"","period":"2026-07-29~2026-10-27"},"collectionDays":null,"balance":null,"overdue":null,"overdueDays":null,"limitUsage":null,"limitUsageInfo":{"status":"산출불가","reason":"적용 한도 결합 방식 미확인(설정 LIMIT_COMBINE)","method":"","period":"~"},"limits":[{"limit_type":"기본한도","amount":50000000,"valid_from":"2026-09-16","valid_to":"9999-12-31"}],"collaterals":[{"type":"보증보험증권","set_amount":40000000,"recognized_amount":"","expiry_date":"2026-11-20","review_status":"파일 적재(내부 인정금액 미확인)"}],"guarantee":{"has":"있음","scope":"담보현황 기재(범위·한도 미확인)","period_to":""}},{"wholesaler_id":"9","name":"(가상)자동등록","biz_status":"정상","isNew":false,"categories":"","dataState":"정상","assignee":"","byCategory":{"과일":{"amount12":17640000,"days12":49,"months12":2,"lastMonth":{"ym":"2026-09","amount":9360000,"days":26,"prevAmount":null,"yoy":{"status":"비교불가","reason":"전년 자료 없음"}},"ytd":{"from":"2026-01","to":"2026-09","amount":9360000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 자료 없음"}},"mtd":{"ym":"2026-10","amount":8280000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 실적 0"},"basis":"동일 경과 경매일","elapsed":23},"shareInWs":0.09093721002165171,"shareOfMarket":0.10344827586206896},"채소":{"amount12":8820000,"days12":49,"months12":2,"lastMonth":{"ym":"2026-09","amount":4680000,"days":26,"prevAmount":null,"yoy":{"status":"비교불가","reason":"전년 자료 없음"}},"ytd":{"from":"2026-01","to":"2026-09","amount":4680000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 자료 없음"}},"mtd":{"ym":"2026-10","amount":4140000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 실적 0"},"basis":"동일 경과 경매일","elapsed":23},"shareInWs":0.045468605010825856,"shareOfMarket":0.10344827586206896},"기타":{"amount12":2940000,"days12":49,"months12":2,"lastMonth":{"ym":"2026-09","amount":1560000,"days":26,"prevAmount":null,"yoy":{"status":"비교불가","reason":"전년 자료 없음"}},"ytd":{"from":"2026-01","to":"2026-09","amount":1560000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 자료 없음"}},"mtd":{"ym":"2026-10","amount":1380000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 실적 0"},"basis":"동일 경과 경매일","elapsed":23},"shareInWs":0.015156201670275286,"shareOfMarket":0.10344827586206896},"전체":{"amount12":193980000,"days12":49,"months12":12,"lastMonth":{"ym":"2026-09","amount":15600000,"days":26,"prevAmount":15600000,"yoy":{"status":"정상","value":0}},"ytd":{"from":"2026-01","to":"2026-09","amount":147420000,"prevAmount":147420000,"growth":{"status":"정상","value":0}},"mtd":{"ym":"2026-10","amount":13800000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 실적 0"},"basis":"동일 경과 경매일","elapsed":23},"shareOfMarket":0.10344827586206896}},"turnover":null,"turnoverInfo":{"status":"산출불가","reason":"기간 잔액 자료 없음","method":"","period":"2026-07-29~2026-10-27"},"collectionDays":null,"balance":null,"overdue":null,"overdueDays":null,"limitUsage":null,"limitUsageInfo":{"status":"산출불가","reason":"적용 한도 결합 방식 미확인(설정 LIMIT_COMBINE)","method":"","period":"~"},"limits":[],"collaterals":[],"guarantee":null}],"cases":[{"case_id":"C-2026-0001","wholesaler_id":"1","status":"조치진행","opened_date":"2026-10-28","auctioneer":"(가상)경매사A","auctioneer_id":"auc1@example.invalid","owner":"시스템 관리자","trend_due":"2026-10-31","action_due":"2026-11-02","recheck_date":"2026-11-30","result_class":"채권 검토 필요","close_reason":"","is_recurrence":false},{"case_id":"C-2026-0002","wholesaler_id":"6","status":"동향확인중","opened_date":"2026-10-28","auctioneer":"(가상)경매사A","auctioneer_id":"auc1@example.invalid","owner":"시스템 관리자","trend_due":"2026-10-31","action_due":"","recheck_date":"","result_class":"","close_reason":"","is_recurrence":false}]};
+var DATA = {"generated_at":"2026-10-28 09:00:00","for_user":{"name":"시스템","role":"관리자","user_id":"owner@example.invalid"},"app":{"name":"중도매인 통합관리","version":"0.7.0-weekly"},"status":{"base_date":"2026-10-27","data_status":"정상","status_reasons":"","last_updated":"2026-10-28 09:00:00","ar_available":"아니오","signal_base_date":"2026-10-27"},"meta":{"baseDate":"2026-10-27","metricBaseDate":"2026-10-27","lastUpdated":"2026-10-28 09:00:00","dataStatus":"정상","period12":"2025-11 ~ 2026-10","monthComplete":false,"lastCompleteYm":"2026-09","currentYm":"2026-10","ytdPeriod":"2026-01 ~ 2026-09","turnoverNote":"회전율·회수일수·한도 사용률은 부류 구분 없이 전체 기준입니다. 부류별 채권 배분 근거가 없어 부류별 회전율을 산출하지 않습니다.","partialNote":"2026-10은 진행 중인 월입니다. 전년 비교는 동일 경과 경매일 기준으로만 표시하며, 월 전체 증감률은 월 마감 후 표시합니다.","monthsAvailable":25},"notes":{"turnover":"회전율·회수일수·한도 사용률은 부류 구분 없이 전체 기준입니다. 부류별 채권 배분 근거가 없어 부류별 회전율을 산출하지 않습니다.","partial":"2026-10은 진행 중인 월입니다. 전년 비교는 동일 경과 경매일 기준으로만 표시하며, 월 전체 증감률은 월 마감 후 표시합니다.","privacy":"이 파일에는 보증인 성명·연락처·증빙·변경 이력이 들어 있지 않습니다. 파일을 받은 사람은 파일 안 자료를 모두 볼 수 있으므로 외부로 전달하지 마세요."},"resultClasses":["일시적 변화","지속 관찰","채권 검토 필요","판정 보류(자료 부족)"],"rules":{"S01":{"label":"미수금 회전율 저하","family":"회수","severity":"주의"},"S02":{"label":"미수금 증가","family":"회수","severity":"주의"},"S03":{"label":"연체 발생·장기화","family":"회수","severity":"경고"},"S04":{"label":"구매실적 급감","family":"거래","severity":"주의"},"S05":{"label":"한도 사용률 상승","family":"회수","severity":"주의"},"S06":{"label":"담보·보증 기한 도래","family":"기한","severity":"정보"},"S07":{"label":"복수 징후 동시 발생","family":"복합","severity":"경고"}},"quadrants":{"HH":{"code":"HH","label":"핵심 유지군","desc":"실적 증가·회전율 높음"},"HL":{"code":"HL","label":"집중 점검군","desc":"실적 증가·회전율 낮음 (거래는 늘고 회수는 느림)"},"LH":{"code":"LH","label":"육성 검토군","desc":"실적 감소·회전율 높음"},"LL":{"code":"LL","label":"개별 진단군","desc":"실적 감소·회전율 낮음"}},"kpis":{"flagged":1,"flaggedHigh":0,"trendWait":1,"trendLate":0,"trendsThisWeek":1,"openActions":0,"pendingApproval":0,"recheck":0,"recheckDue":0,"wholesalers":4},"flagged":[{"wholesaler_id":"6","name":"(가상)정","assignee":"(가상)경매사A","severity":"정보","signals":[{"signal_id":"SG261028090000-9B0DBA","wholesaler_id":"6","rule_id":"S06","label":"담보·보증 기한 도래","severity":"정보","status":"연결","first_date":"2026-10-27","last_date":"2026-10-27","case_id":"","evidence":{"kind":"담보","id":"C6-2007","label":"보증보험증권","date":"2026-11-20","dday":24}}],"case_id":"C-2026-0002","case_status":"동향확인중","trend_due":"2026-10-31","latest_trend":null,"balance":null,"overdue":null,"overdueDays":null,"turnover":null,"yoy":{"status":"정상","value":0},"lastMonth":{"ym":"2026-09","amount":46800000,"days":26,"prevAmount":46800000,"yoy":{"status":"정상","value":0}},"guides":[]}],"trendWait":[{"case_id":"C-2026-0002","wholesaler_id":"6","name":"(가상)정","auctioneer":"(가상)경매사A","trend_due":"2026-10-31","overdue":false,"signals":["S06"]}],"recentTrends":[{"name":"(가상)갑","wholesaler_id":"1","case_id":"C-2026-0001","version":1,"checked_date":"2026-10-28","check_method":"방문","result_class":"채권 검토 필요","facts":["(가상) 10월 결제 지연 사유: 거래처 대금 미회수","(가상) 11/15 결제 약속"],"writer":"(가상)경매사A","submitted_at":"2026-10-28 09:00:00","official_source":"파일 제출(TREND_C-2026-0001_20261028.json)"}],"openActions":[],"doneActions":[],"recheck":[],"matrix":{"xMode":"전년동월증감","growthRank":{"ym":"2026-09","points":[{"wholesaler_id":"1","name":"(가상)갑","x":0,"lastMonth":65000000,"prevYearMonth":65000000,"size":65000000},{"wholesaler_id":"2","name":"(가상)병","x":0,"lastMonth":23400000,"prevYearMonth":23400000,"size":23400000},{"wholesaler_id":"6","name":"(가상)정","x":0,"lastMonth":46800000,"prevYearMonth":46800000,"size":46800000},{"wholesaler_id":"9","name":"(가상)자동등록","x":0,"lastMonth":15600000,"prevYearMonth":15600000,"size":15600000}],"total":4,"decline":0,"idle":[],"note":"미수잔액·입금 자료가 없어 세로축(회전율)을 셀 수 없습니다. 자료가 들어오면 4분면으로 바뀝니다."},"boundaries":{"x":0,"xSource":"전년 동월과 같음(0%)","y":null,"ySource":"당기중앙값 (고정값 미설정으로 대체)","computedAt":"2026-10-28 09:00:00"},"counts":{"HH":0,"HL":0,"LH":0,"LL":0},"points":[],"excluded":[{"wholesaler_id":"1","name":"(가상)갑","x":0,"y":null,"size":65000000,"amount12":808250000,"lastMonth":65000000,"prevYearMonth":65000000,"growth":{"status":"정상","value":0},"balance":null,"collectionDays":null,"overdue":null,"reason":"회전율 기간 잔액 자료 없음"},{"wholesaler_id":"2","name":"(가상)병","x":0,"y":null,"size":23400000,"amount12":290970000,"lastMonth":23400000,"prevYearMonth":23400000,"growth":{"status":"정상","value":0},"balance":null,"collectionDays":null,"overdue":null,"reason":"회전율 기간 잔액 자료 없음"},{"wholesaler_id":"6","name":"(가상)정","x":0,"y":null,"size":46800000,"amount12":581940000,"lastMonth":46800000,"prevYearMonth":46800000,"growth":{"status":"정상","value":0},"balance":null,"collectionDays":null,"overdue":null,"reason":"회전율 기간 잔액 자료 없음"},{"wholesaler_id":"9","name":"(가상)자동등록","x":0,"y":null,"size":15600000,"amount12":193980000,"lastMonth":15600000,"prevYearMonth":15600000,"growth":{"status":"정상","value":0},"balance":null,"collectionDays":null,"overdue":null,"reason":"회전율 기간 잔액 자료 없음"}],"disclaimer":"이 분류는 관리 우선순위를 찾기 위한 참고 자료이며, 신용등급이나 거래제한 기준이 아닙니다. 신호·조치 판단에 자동으로 연결되지 않습니다.","axes":{"x":"2026-09 사업실적의 전년 동월 대비 증감률(전체)","y":"최근 3개월 미수금 회전율(전체 기준)","color":"4분면 분류","size":"2026-09 사업실적(구매금액)"},"quadrants":{"HH":{"code":"HH","label":"핵심 유지군","desc":"실적 증가·회전율 높음"},"HL":{"code":"HL","label":"집중 점검군","desc":"실적 증가·회전율 낮음 (거래는 늘고 회수는 느림)"},"LH":{"code":"LH","label":"육성 검토군","desc":"실적 감소·회전율 높음"},"LL":{"code":"LL","label":"개별 진단군","desc":"실적 감소·회전율 낮음"}}},"guides":[],"checklists":[{"case_id":"C-2026-0002","wholesaler_id":"6","name":"(가상)정","auctioneer":"(가상)경매사A","opened_date":"2026-10-28","trend_due":"2026-10-31","signals":["S06 담보·보증 기한 도래"],"items":[{"item_id":"CK01","category":"인력","text":"종업원·배송 인력이 줄었거나 경리·판매 담당 등 핵심 직원이 그만뒀다 (매출·수익 감소의 강한 신호)","weight":2,"is_assumed":true},{"item_id":"CK02","category":"결제","text":"결제일 연기·분할·부분 결제를 요청했거나, 결제 약속을 어긴 적이 있다","weight":2,"is_assumed":true},{"item_id":"CK03","category":"결제","text":"결제 수단이 바뀌었다 (현금→어음·카드·소액 분할, 제3자 명의 입금 등)","weight":1,"is_assumed":true},{"item_id":"CK04","category":"거래","text":"경매 참여 횟수가 줄었거나 낙찰 물량·단가가 평소 패턴과 다르게 급감·저가 위주로 바뀌었다","weight":1,"is_assumed":true},{"item_id":"CK05","category":"거래","text":"주요 납품처(마트·식당·소매) 이탈·축소가 있거나 \"거래처에서 돈을 못 받고 있다\"고 호소한다","weight":1,"is_assumed":true},{"item_id":"CK06","category":"현장","text":"점포·창고 재고가 비정상적으로 줄었거나, 차량·설비를 줄이거나 팔았거나, 운영 시간이 짧아졌다","weight":1,"is_assumed":true},{"item_id":"CK07","category":"대표자","text":"대표자가 연락을 피하거나 현장 부재가 잦고, 건강·가정·소송·경영권 분쟁 등 사정이 확인됐다","weight":2,"is_assumed":true},{"item_id":"CK08","category":"신용","text":"타 금융기관 연체, 세금 체납, 압류·가압류 통지, 담보 부동산 처분·추가 설정 소식이 있다","weight":2,"is_assumed":true},{"item_id":"CK09","category":"자금","text":"선지급·외상한도 증액·결제 유예를 급히 요청하거나, 사채·고금리 자금을 쓰는 정황이 있다","weight":2,"is_assumed":true},{"item_id":"CK10","category":"관계","text":"다른 공판장·도매시장으로 거래를 옮기거나, 다른 중도매인 명의로 거래하는 정황이 있다","weight":1,"is_assumed":true}]}],"checklistItems":[{"item_id":"CK01","category":"인력","text":"종업원·배송 인력이 줄었거나 경리·판매 담당 등 핵심 직원이 그만뒀다 (매출·수익 감소의 강한 신호)","weight":2,"is_assumed":true},{"item_id":"CK02","category":"결제","text":"결제일 연기·분할·부분 결제를 요청했거나, 결제 약속을 어긴 적이 있다","weight":2,"is_assumed":true},{"item_id":"CK03","category":"결제","text":"결제 수단이 바뀌었다 (현금→어음·카드·소액 분할, 제3자 명의 입금 등)","weight":1,"is_assumed":true},{"item_id":"CK04","category":"거래","text":"경매 참여 횟수가 줄었거나 낙찰 물량·단가가 평소 패턴과 다르게 급감·저가 위주로 바뀌었다","weight":1,"is_assumed":true},{"item_id":"CK05","category":"거래","text":"주요 납품처(마트·식당·소매) 이탈·축소가 있거나 \"거래처에서 돈을 못 받고 있다\"고 호소한다","weight":1,"is_assumed":true},{"item_id":"CK06","category":"현장","text":"점포·창고 재고가 비정상적으로 줄었거나, 차량·설비를 줄이거나 팔았거나, 운영 시간이 짧아졌다","weight":1,"is_assumed":true},{"item_id":"CK07","category":"대표자","text":"대표자가 연락을 피하거나 현장 부재가 잦고, 건강·가정·소송·경영권 분쟁 등 사정이 확인됐다","weight":2,"is_assumed":true},{"item_id":"CK08","category":"신용","text":"타 금융기관 연체, 세금 체납, 압류·가압류 통지, 담보 부동산 처분·추가 설정 소식이 있다","weight":2,"is_assumed":true},{"item_id":"CK09","category":"자금","text":"선지급·외상한도 증액·결제 유예를 급히 요청하거나, 사채·고금리 자금을 쓰는 정황이 있다","weight":2,"is_assumed":true},{"item_id":"CK10","category":"관계","text":"다른 공판장·도매시장으로 거래를 옮기거나, 다른 중도매인 명의로 거래하는 정황이 있다","weight":1,"is_assumed":true}],"wholesalers":[{"wholesaler_id":"1","name":"(가상)갑","biz_status":"정상","isNew":false,"categories":"과일","dataState":"정상","assignee":"(가상)경매사A","byCategory":{"과일":{"amount12":73500000,"days12":49,"months12":2,"lastMonth":{"ym":"2026-09","amount":39000000,"days":26,"prevAmount":null,"yoy":{"status":"비교불가","reason":"전년 자료 없음"}},"ytd":{"from":"2026-01","to":"2026-09","amount":39000000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 자료 없음"}},"mtd":{"ym":"2026-10","amount":34500000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 실적 0"},"basis":"동일 경과 경매일","elapsed":23},"shareInWs":0.09093721002165171,"shareOfMarket":0.43103448275862066},"채소":{"amount12":36750000,"days12":49,"months12":2,"lastMonth":{"ym":"2026-09","amount":19500000,"days":26,"prevAmount":null,"yoy":{"status":"비교불가","reason":"전년 자료 없음"}},"ytd":{"from":"2026-01","to":"2026-09","amount":19500000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 자료 없음"}},"mtd":{"ym":"2026-10","amount":17250000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 실적 0"},"basis":"동일 경과 경매일","elapsed":23},"shareInWs":0.045468605010825856,"shareOfMarket":0.43103448275862066},"기타":{"amount12":12250000,"days12":49,"months12":2,"lastMonth":{"ym":"2026-09","amount":6500000,"days":26,"prevAmount":null,"yoy":{"status":"비교불가","reason":"전년 자료 없음"}},"ytd":{"from":"2026-01","to":"2026-09","amount":6500000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 자료 없음"}},"mtd":{"ym":"2026-10","amount":5750000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 실적 0"},"basis":"동일 경과 경매일","elapsed":23},"shareInWs":0.015156201670275286,"shareOfMarket":0.43103448275862066},"전체":{"amount12":808250000,"days12":49,"months12":12,"lastMonth":{"ym":"2026-09","amount":65000000,"days":26,"prevAmount":65000000,"yoy":{"status":"정상","value":0}},"ytd":{"from":"2026-01","to":"2026-09","amount":614250000,"prevAmount":614250000,"growth":{"status":"정상","value":0}},"mtd":{"ym":"2026-10","amount":57500000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 실적 0"},"basis":"동일 경과 경매일","elapsed":23},"shareOfMarket":0.43103448275862066}},"turnover":null,"turnoverInfo":{"status":"산출불가","reason":"기간 잔액 자료 없음","method":"","period":"2026-07-29~2026-10-27"},"collectionDays":null,"balance":null,"overdue":null,"overdueDays":null,"limitUsage":null,"limitUsageInfo":{"status":"산출불가","reason":"적용 한도 결합 방식 미확인(설정 LIMIT_COMBINE)","method":"","period":"~"},"limits":[{"limit_type":"추가한도","amount":124000000,"valid_from":"2026-09-16","valid_to":"9999-12-31"},{"limit_type":"기본한도","amount":70000000,"valid_from":"2026-10-20","valid_to":"9999-12-31"},{"limit_type":"마감한도","amount":24000000,"valid_from":"2026-09-16","valid_to":"9999-12-31"}],"collaterals":[{"type":"부동산","set_amount":60000000,"recognized_amount":"","expiry_date":"","review_status":"파일 적재(내부 인정금액 미확인)"},{"type":"예금(질권)","set_amount":50000000,"recognized_amount":"","expiry_date":"2027-07-29","review_status":"파일 적재(내부 인정금액 미확인)"}],"guarantee":{"has":"있음","scope":"담보현황 기재(범위·한도 미확인)","period_to":""}},{"wholesaler_id":"2","name":"(가상)병","biz_status":"정상","isNew":false,"categories":"채소","dataState":"정상","assignee":"(가상)경매사B","byCategory":{"과일":{"amount12":26460000,"days12":49,"months12":2,"lastMonth":{"ym":"2026-09","amount":14040000,"days":26,"prevAmount":null,"yoy":{"status":"비교불가","reason":"전년 자료 없음"}},"ytd":{"from":"2026-01","to":"2026-09","amount":14040000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 자료 없음"}},"mtd":{"ym":"2026-10","amount":12420000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 실적 0"},"basis":"동일 경과 경매일","elapsed":23},"shareInWs":0.09093721002165171,"shareOfMarket":0.15517241379310345},"채소":{"amount12":13230000,"days12":49,"months12":2,"lastMonth":{"ym":"2026-09","amount":7020000,"days":26,"prevAmount":null,"yoy":{"status":"비교불가","reason":"전년 자료 없음"}},"ytd":{"from":"2026-01","to":"2026-09","amount":7020000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 자료 없음"}},"mtd":{"ym":"2026-10","amount":6210000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 실적 0"},"basis":"동일 경과 경매일","elapsed":23},"shareInWs":0.045468605010825856,"shareOfMarket":0.15517241379310345},"기타":{"amount12":4410000,"days12":49,"months12":2,"lastMonth":{"ym":"2026-09","amount":2340000,"days":26,"prevAmount":null,"yoy":{"status":"비교불가","reason":"전년 자료 없음"}},"ytd":{"from":"2026-01","to":"2026-09","amount":2340000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 자료 없음"}},"mtd":{"ym":"2026-10","amount":2070000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 실적 0"},"basis":"동일 경과 경매일","elapsed":23},"shareInWs":0.015156201670275286,"shareOfMarket":0.15517241379310345},"전체":{"amount12":290970000,"days12":49,"months12":12,"lastMonth":{"ym":"2026-09","amount":23400000,"days":26,"prevAmount":23400000,"yoy":{"status":"정상","value":0}},"ytd":{"from":"2026-01","to":"2026-09","amount":221130000,"prevAmount":221130000,"growth":{"status":"정상","value":0}},"mtd":{"ym":"2026-10","amount":20700000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 실적 0"},"basis":"동일 경과 경매일","elapsed":23},"shareOfMarket":0.15517241379310345}},"turnover":null,"turnoverInfo":{"status":"산출불가","reason":"기간 잔액 자료 없음","method":"","period":"2026-07-29~2026-10-27"},"collectionDays":null,"balance":null,"overdue":null,"overdueDays":null,"limitUsage":null,"limitUsageInfo":{"status":"산출불가","reason":"적용 한도 결합 방식 미확인(설정 LIMIT_COMBINE)","method":"","period":"~"},"limits":[{"limit_type":"추가한도","amount":27000000,"valid_from":"2026-09-16","valid_to":"9999-12-31"},{"limit_type":"기본한도","amount":27000000,"valid_from":"2026-09-16","valid_to":"9999-12-31"},{"limit_type":"마감한도","amount":8000000,"valid_from":"2026-09-16","valid_to":"9999-12-31"}],"collaterals":[{"type":"거래보증금","set_amount":30000000,"recognized_amount":"","expiry_date":"","review_status":"파일 적재(내부 인정금액 미확인)"}],"guarantee":{"has":"없음","scope":"","period_to":""}},{"wholesaler_id":"6","name":"(가상)정","biz_status":"정상","isNew":false,"categories":"과일","dataState":"정상","assignee":"(가상)경매사A","byCategory":{"과일":{"amount12":52920000,"days12":49,"months12":2,"lastMonth":{"ym":"2026-09","amount":28080000,"days":26,"prevAmount":null,"yoy":{"status":"비교불가","reason":"전년 자료 없음"}},"ytd":{"from":"2026-01","to":"2026-09","amount":28080000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 자료 없음"}},"mtd":{"ym":"2026-10","amount":24840000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 실적 0"},"basis":"동일 경과 경매일","elapsed":23},"shareInWs":0.09093721002165171,"shareOfMarket":0.3103448275862069},"채소":{"amount12":26460000,"days12":49,"months12":2,"lastMonth":{"ym":"2026-09","amount":14040000,"days":26,"prevAmount":null,"yoy":{"status":"비교불가","reason":"전년 자료 없음"}},"ytd":{"from":"2026-01","to":"2026-09","amount":14040000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 자료 없음"}},"mtd":{"ym":"2026-10","amount":12420000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 실적 0"},"basis":"동일 경과 경매일","elapsed":23},"shareInWs":0.045468605010825856,"shareOfMarket":0.3103448275862069},"기타":{"amount12":8820000,"days12":49,"months12":2,"lastMonth":{"ym":"2026-09","amount":4680000,"days":26,"prevAmount":null,"yoy":{"status":"비교불가","reason":"전년 자료 없음"}},"ytd":{"from":"2026-01","to":"2026-09","amount":4680000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 자료 없음"}},"mtd":{"ym":"2026-10","amount":4140000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 실적 0"},"basis":"동일 경과 경매일","elapsed":23},"shareInWs":0.015156201670275286,"shareOfMarket":0.3103448275862069},"전체":{"amount12":581940000,"days12":49,"months12":12,"lastMonth":{"ym":"2026-09","amount":46800000,"days":26,"prevAmount":46800000,"yoy":{"status":"정상","value":0}},"ytd":{"from":"2026-01","to":"2026-09","amount":442260000,"prevAmount":442260000,"growth":{"status":"정상","value":0}},"mtd":{"ym":"2026-10","amount":41400000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 실적 0"},"basis":"동일 경과 경매일","elapsed":23},"shareOfMarket":0.3103448275862069}},"turnover":null,"turnoverInfo":{"status":"산출불가","reason":"기간 잔액 자료 없음","method":"","period":"2026-07-29~2026-10-27"},"collectionDays":null,"balance":null,"overdue":null,"overdueDays":null,"limitUsage":null,"limitUsageInfo":{"status":"산출불가","reason":"적용 한도 결합 방식 미확인(설정 LIMIT_COMBINE)","method":"","period":"~"},"limits":[{"limit_type":"기본한도","amount":50000000,"valid_from":"2026-09-16","valid_to":"9999-12-31"}],"collaterals":[{"type":"보증보험증권","set_amount":40000000,"recognized_amount":"","expiry_date":"2026-11-20","review_status":"파일 적재(내부 인정금액 미확인)"}],"guarantee":{"has":"있음","scope":"담보현황 기재(범위·한도 미확인)","period_to":""}},{"wholesaler_id":"9","name":"(가상)자동등록","biz_status":"정상","isNew":false,"categories":"","dataState":"정상","assignee":"","byCategory":{"과일":{"amount12":17640000,"days12":49,"months12":2,"lastMonth":{"ym":"2026-09","amount":9360000,"days":26,"prevAmount":null,"yoy":{"status":"비교불가","reason":"전년 자료 없음"}},"ytd":{"from":"2026-01","to":"2026-09","amount":9360000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 자료 없음"}},"mtd":{"ym":"2026-10","amount":8280000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 실적 0"},"basis":"동일 경과 경매일","elapsed":23},"shareInWs":0.09093721002165171,"shareOfMarket":0.10344827586206896},"채소":{"amount12":8820000,"days12":49,"months12":2,"lastMonth":{"ym":"2026-09","amount":4680000,"days":26,"prevAmount":null,"yoy":{"status":"비교불가","reason":"전년 자료 없음"}},"ytd":{"from":"2026-01","to":"2026-09","amount":4680000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 자료 없음"}},"mtd":{"ym":"2026-10","amount":4140000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 실적 0"},"basis":"동일 경과 경매일","elapsed":23},"shareInWs":0.045468605010825856,"shareOfMarket":0.10344827586206896},"기타":{"amount12":2940000,"days12":49,"months12":2,"lastMonth":{"ym":"2026-09","amount":1560000,"days":26,"prevAmount":null,"yoy":{"status":"비교불가","reason":"전년 자료 없음"}},"ytd":{"from":"2026-01","to":"2026-09","amount":1560000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 자료 없음"}},"mtd":{"ym":"2026-10","amount":1380000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 실적 0"},"basis":"동일 경과 경매일","elapsed":23},"shareInWs":0.015156201670275286,"shareOfMarket":0.10344827586206896},"전체":{"amount12":193980000,"days12":49,"months12":12,"lastMonth":{"ym":"2026-09","amount":15600000,"days":26,"prevAmount":15600000,"yoy":{"status":"정상","value":0}},"ytd":{"from":"2026-01","to":"2026-09","amount":147420000,"prevAmount":147420000,"growth":{"status":"정상","value":0}},"mtd":{"ym":"2026-10","amount":13800000,"prevAmount":0,"growth":{"status":"비교불가","reason":"전년 실적 0"},"basis":"동일 경과 경매일","elapsed":23},"shareOfMarket":0.10344827586206896}},"turnover":null,"turnoverInfo":{"status":"산출불가","reason":"기간 잔액 자료 없음","method":"","period":"2026-07-29~2026-10-27"},"collectionDays":null,"balance":null,"overdue":null,"overdueDays":null,"limitUsage":null,"limitUsageInfo":{"status":"산출불가","reason":"적용 한도 결합 방식 미확인(설정 LIMIT_COMBINE)","method":"","period":"~"},"limits":[],"collaterals":[],"guarantee":null}],"cases":[{"case_id":"C-2026-0001","wholesaler_id":"1","status":"조치진행","opened_date":"2026-10-28","auctioneer":"(가상)경매사A","auctioneer_id":"auc1@example.invalid","owner":"시스템 관리자","trend_due":"2026-10-31","action_due":"2026-11-02","recheck_date":"2026-11-30","result_class":"채권 검토 필요","close_reason":"","is_recurrence":false},{"case_id":"C-2026-0002","wholesaler_id":"6","status":"동향확인중","opened_date":"2026-10-28","auctioneer":"(가상)경매사A","auctioneer_id":"auc1@example.invalid","owner":"시스템 관리자","trend_due":"2026-10-31","action_due":"","recheck_date":"","result_class":"","close_reason":"","is_recurrence":false}]};
 (function () {
   'use strict';
   var h = SummaryView.h;

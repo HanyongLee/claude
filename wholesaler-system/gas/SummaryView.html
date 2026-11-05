@@ -102,13 +102,18 @@
     var html = '';
     if (st.data_status && st.data_status !== '정상') html += '<div class="note bad">데이터 상태 <b>' + h(st.data_status) + '</b> — ' + h(st.status_reasons || '') + ' 이 기간 수치는 판정 보류입니다.</div>';
     if (st.ar_available === '아니오') html += '<div class="note warn">미수잔액·입금 자료가 아직 없어 회전율·연체·미수금 증가 징후는 산출되지 않습니다. 실적 감소·담보 기한 징후만 표시됩니다.</div>';
-    // 체계 띠: 채권관리 → 동향관리 → 연체채권 조치
-    html += '<div class="flowband"><span class="step">① 채권관리<small>이상 징후 자동 탐지</small></span><span class="arr">→</span><span class="step">② 동향관리<small>현장 확인 체크리스트</small></span><span class="arr">→</span><span class="step">③ 연체채권 조치<small>매뉴얼 조항에 따른 대응</small></span><span class="goal">목적: 중도매인 실적 관리로 분산 역량 강화</span></div>';
-    // 요약 3장
-    html += '<div class="sum3">' +
-      '<a class="sumcard ' + (flaggedHigh ? 'bad' : (k.flagged ? 'warn' : 'ok')) + '" href="#tab-signal" data-tab="signal"><div class="k">① 채권관리 — 이상 징후</div><div class="v">' + k.flagged + '<small>명</small></div><div class="s">경고 이상 ' + flaggedHigh + '명 · 확인 대기 ' + k.trendWait + '건' + (k.trendLate ? ' · <b>지연 ' + k.trendLate + '</b>' : '') + '</div></a>' +
-      '<a class="sumcard ' + (k.trendLate ? 'bad' : (k.trendWait ? 'warn' : 'ok')) + '" href="#tab-trend" data-tab="trend"><div class="k">② 동향관리 — 현장 확인</div><div class="v">' + k.trendsThisWeek + '<small>건/주</small></div><div class="s">체크리스트 대기 ' + k.trendWait + '건 · 최근 제출 ' + d.recentTrends.length + '건</div></a>' +
-      '<a class="sumcard ' + (k.pendingApproval ? 'warn' : (k.openActions ? 'info' : 'ok')) + '" href="#tab-action" data-tab="action"><div class="k">③ 연체채권 조치</div><div class="v">' + k.openActions + '<small>건 진행</small></div><div class="s">승인 대기 ' + k.pendingApproval + ' · 재점검 ' + k.recheck + (k.recheckDue ? ' (도래 ' + k.recheckDue + ')' : '') + '</div></a></div>';
+    // 요약 목록 카드 (행 = 아이콘·큰 숫자·보기 버튼)
+    var trow = function (tab, no, color, value, unit, label, sub, hot) {
+      return '<a class="trow" href="#tab-' + tab + '" data-tab="' + tab + '">' +
+        '<span class="ticon" style="background:' + color + '1f;color:' + color + '">' + no + '</span>' +
+        '<span class="tmid"><span class="tv"' + (hot ? ' style="color:var(--bad)"' : '') + '>' + value + '<small>' + unit + '</small></span><span class="tk">' + label + (sub ? ' <span class="tdot">·</span> ' + sub : '') + '</span></span>' +
+        '<span class="tbtn">보기</span></a>';
+    };
+    html += '<div class="card tlist">' +
+      trow('signal', '①', '#f04452', k.flagged, '명', '채권관리 — 이상 징후', '경고 이상 ' + flaggedHigh + ' · 확인 대기 ' + k.trendWait + (k.trendLate ? ' · <b>지연 ' + k.trendLate + '</b>' : ''), flaggedHigh > 0) +
+      trow('trend', '②', '#3182f6', k.trendsThisWeek, '건/주', '동향관리 — 현장 확인', '체크리스트 대기 ' + k.trendWait + ' · 최근 제출 ' + d.recentTrends.length, false) +
+      trow('action', '③', '#1b9e66', k.openActions, '건 진행', '연체채권 조치', '승인 대기 ' + k.pendingApproval + ' · 재점검 ' + k.recheck + (k.recheckDue ? ' (도래 ' + k.recheckDue + ')' : ''), false) +
+      '<div class="tfoot">채권관리 → 동향관리 → 연체채권 조치 · 목적: 중도매인 실적 관리로 분산 역량 강화</div></div>';
     // 4분면
     html += '<div class="card"><h2>거래·회수 4분면 <span class="muted" style="font-size:12px;font-weight:400">세로 미수금 회전율 · 가로 ' + h(d.matrix.axes.x) + '</span></h2>' + matrixSvg(d.matrix, link) + '<div class="note">' + h(d.matrix.disclaimer) + '</div></div>';
     // 탭
@@ -153,7 +158,7 @@
     var tabs = root.querySelector('#sumTabs');
     var show = function (t) { Array.prototype.forEach.call(tabs.children, function (b) { b.className = b.getAttribute('data-tab') === t ? 'on' : ''; }); Array.prototype.forEach.call(root.querySelectorAll('.tabpane'), function (p) { p.classList.toggle('hidden', p.id !== 'tab-' + t); }); };
     tabs.onclick = function (e) { var t = e.target.getAttribute('data-tab'); if (t) show(t); };
-    Array.prototype.forEach.call(root.querySelectorAll('.sumcard'), function (a) { a.onclick = function (e) { e.preventDefault(); show(a.getAttribute('data-tab')); tabs.scrollIntoView({ block: 'start' }); }; });
+    Array.prototype.forEach.call(root.querySelectorAll('.trow'), function (a) { a.onclick = function (e) { e.preventDefault(); show(a.getAttribute('data-tab')); tabs.scrollIntoView({ block: 'start' }); }; });
     root.addEventListener('click', function (e) { var b = e.target.closest('button[data-ck]'); if (b && opts.onChecklist) opts.onChecklist(b.getAttribute('data-ck')); });
   }
 
@@ -175,16 +180,16 @@
 })(window);
 </script>
 <style>
-  .flowband { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 12px; font-size: 13.5px; }
-  .flowband .step { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; font-weight: 600; }
-  .flowband .step small { display: block; font-weight: 400; color: var(--text-2); font-size: 11.5px; }
-  .flowband .arr { color: var(--text-2); font-weight: 700; } .flowband .goal { margin-left: auto; color: var(--text-2); font-size: 12.5px; }
-  .sum3 { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); margin-bottom: 12px; }
-  .sumcard { display: block; background: var(--surface); border: 1px solid var(--border); border-left: 5px solid var(--border); border-radius: 8px; padding: 10px 14px; color: var(--text); text-decoration: none; }
-  .sumcard:hover { text-decoration: none; background: var(--surface-2); }
-  .sumcard .k { font-size: 13px; color: var(--text-2); } .sumcard .v { font-size: 28px; font-weight: 700; line-height: 1.2; } .sumcard .v small { font-size: 13px; font-weight: 400; color: var(--text-2); margin-left: 4px; }
-  .sumcard .s { font-size: 12.5px; color: var(--text-2); }
-  .sumcard.bad { border-left-color: var(--bad); } .sumcard.warn { border-left-color: var(--warn); } .sumcard.ok { border-left-color: var(--ok); } .sumcard.info { border-left-color: var(--accent); }
+  .tlist { padding: 8px 10px; margin-bottom: 12px; }
+  .trow { display: flex; align-items: center; gap: 14px; padding: 13px 12px; border-radius: 16px; color: var(--text); text-decoration: none; }
+  .trow:hover { background: var(--surface-2); text-decoration: none; }
+  .ticon { width: 44px; height: 44px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 700; flex: none; }
+  .tmid { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  .tv { font-size: 20px; font-weight: 800; line-height: 1.25; font-variant-numeric: tabular-nums; }
+  .tv small { font-size: 13px; font-weight: 600; color: var(--text-2); margin-left: 3px; }
+  .tk { font-size: 13px; color: var(--muted); } .tk b { color: var(--bad); } .tdot { opacity: .5; }
+  .tbtn { background: var(--surface-2); border-radius: 12px; padding: 8px 14px; font-size: 14px; font-weight: 600; color: var(--text-2); flex: none; }
+  .tfoot { padding: 11px 12px 5px; font-size: 12.5px; color: var(--muted); border-top: 1px solid var(--border); margin-top: 4px; }
   .tabpane.hidden { display: none; }
   .tabs button.on { background: var(--info-bg); font-weight: 600; }
   .ck-sheet { background: #fff; color: #111; border: 1px solid #999; padding: 16px; margin: 12px 0; page-break-after: always; }
